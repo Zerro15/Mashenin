@@ -18,9 +18,9 @@ export default function Rooms({ rooms }: RoomsPageProps) {
     <div className="container">
       <header className="header">
         <h1>Комнаты</h1>
-        <Link href="/create" className="button">
+        <a href="/create" className="button">
           Создать комнату
-        </Link>
+        </a>
       </header>
 
       <main className="main">
@@ -30,13 +30,13 @@ export default function Rooms({ rooms }: RoomsPageProps) {
           ) : (
             <div className="grid">
               {rooms.map((room) => (
-                <Link key={room.id} href={`/room/${room.id}`} className="room-card">
+                <a key={room.id} href={`/room/${room.id}`} className="room-card">
                   <h3>{room.name}</h3>
                   <p>{room.topic}</p>
                   <div className="members">
                     <span>{room.members}</span> участников
                   </div>
-                </Link>
+                </a>
               ))}
             </div>
           )}

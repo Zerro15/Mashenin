@@ -51,11 +51,11 @@ export default function Home({ summary }: HomePageProps) {
 export const getServerSideProps: GetServerSideProps = async () => {
   try {
     const apiClient = createApiClient('http://api:4000');
-    const response = await apiClient('/summary');
+    const response = await apiClient.get('/summary');
 
     return {
       props: {
-        summary: response.ok ? response.data : {}
+        summary: response.data?.ok ? response.data : {}
       }
     };
   } catch (error) {

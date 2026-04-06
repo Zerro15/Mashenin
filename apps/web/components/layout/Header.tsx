@@ -1,17 +1,15 @@
-import Link from 'next/link';
-
 export default function Header() {
   return (
     <header className="header">
-      <Link href="/" className="logo">
+      <a href="/" className="logo">
         <h1>mashenin</h1>
-      </Link>
+      </a>
 
       <nav>
-        <Link href="/rooms">Комнаты</Link>
-        <Link href="/friends">Люди</Link>
-        <Link href="/events">События</Link>
-        <Link href="/settings">Настройки</Link>
+        <a href="/rooms">Комнаты</a>
+        <a href="/friends">Люди</a>
+        <a href="/events">События</a>
+        <a href="/settings">Настройки</a>
       </nav>
     </header>
   );
