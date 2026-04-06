@@ -20,7 +20,7 @@ services:
     command: ["node", "src/server.js"]
     volumes:
       - ./apps/api:/app
-      - ./packages/shared:/shared
+      - ./packages/shared:/packages/shared
     ports:
       - "4100:4000"
     environment:

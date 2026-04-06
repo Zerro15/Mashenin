@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { events, friends, roomMessages, rooms } from "/shared/src/mock-data.js";
+import { events, friends, roomMessages, rooms } from "../../../../packages/shared/src/mock-data.js";
 
 const dataDir = path.resolve(process.cwd(), "data");
 const stateFile = path.join(dataDir, "runtime-state.json");
