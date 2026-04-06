@@ -2,7 +2,7 @@ services:
   web:
     image: node:20-alpine
     working_dir: /app
-    command: ["node", "src/server.js"]
+    command: ["npm", "run", "dev"]
     volumes:
       - ./apps/web:/app
     ports:

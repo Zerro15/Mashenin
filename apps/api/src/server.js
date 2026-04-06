@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { getConfig } from './lib/config.js';
 import { setStoreProvider } from './lib/store.js';
+import * as store from './lib/store.js';
 import { createPool } from './lib/sql.js';
 
 // Импорт плагинов
@@ -51,6 +52,7 @@ async function buildServer() {
 
   // Декораторы для конфигурации
   fastify.decorate('config', config);
+  fastify.decorate('store', store);
 
   // Регистрация маршрутов
   await fastify.register(authRoutes, { prefix: '/api/auth' });

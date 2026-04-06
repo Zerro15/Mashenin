@@ -1,9 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
-import { events, friends, roomMessages, rooms } from "/shared/src/mock-data.js";
+import crypto from "node:crypto";
+import { events, friends, roomMessages, rooms } from "../../../../packages/shared/src/mock-data.js";
 
 const dataDir = path.resolve(process.cwd(), "data");
 const stateFile = path.join(dataDir, "runtime-state.json");
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+async function verifyPassword(password, hash) {
+  return hashPassword(password) === hash;
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
