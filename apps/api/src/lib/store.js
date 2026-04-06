@@ -1,0 +1,120 @@
+import * as fileStore from "./file-store.js";
+import * as sqlStore from "./sql-store.js";
+
+let provider = "file";
+
+export function setStoreProvider(nextProvider) {
+  provider = nextProvider;
+}
+
+function impl() {
+  return provider === "sql" ? sqlStore : fileStore;
+}
+
+export async function getSummary(...args) {
+  return impl().getSummary(...args);
+}
+
+export async function getRooms(...args) {
+  return impl().getRooms(...args);
+}
+
+export async function getFriends(...args) {
+  return impl().getFriends(...args);
+}
+
+export async function getEvents(...args) {
+  return impl().getEvents(...args);
+}
+
+export async function getRoomById(...args) {
+  return impl().getRoomById(...args);
+}
+
+export async function getMessagesForRoom(...args) {
+  return impl().getMessagesForRoom(...args);
+}
+
+export async function getInvitePreview(...args) {
+  return impl().getInvitePreview(...args);
+}
+
+export async function createSession(...args) {
+  return impl().createSession(...args);
+}
+
+export async function registerUser(...args) {
+  return impl().registerUser(...args);
+}
+
+export async function loginWithPassword(...args) {
+  return impl().loginWithPassword(...args);
+}
+
+export async function getSessionUser(...args) {
+  return impl().getSessionUser(...args);
+}
+
+export async function updateProfile(...args) {
+  return impl().updateProfile(...args);
+}
+
+export async function clearSession(...args) {
+  return impl().clearSession(...args);
+}
+
+export async function joinRoom(...args) {
+  return impl().joinRoom(...args);
+}
+
+export async function createRoomAccess(...args) {
+  return impl().createRoomAccess(...args);
+}
+
+export async function getRoomState(...args) {
+  return impl().getRoomState(...args);
+}
+
+export async function getRoomSocial(...args) {
+  return impl().getRoomSocial(...args);
+}
+
+export async function createMessage(...args) {
+  return impl().createMessage(...args);
+}
+
+export async function createEvent(...args) {
+  return impl().createEvent(...args);
+}
+
+export async function respondToEvent(...args) {
+  return impl().respondToEvent(...args);
+}
+
+export async function getInvite(...args) {
+  return impl().getInvite?.(...args) || null;
+}
+
+export async function createUser(...args) {
+  return impl().createUser?.(...args) || null;
+}
+
+export async function useInvite(...args) {
+  return impl().useInvite?.(...args) || null;
+}
+
+export async function getRoom(...args) {
+  return impl().getRoom?.(...args) || impl().getRoomById(...args);
+}
+
+export async function getRoomMembers(...args) {
+  return impl().getRoomMembers?.(...args) || [];
+}
+
+export async function getRoomPresence(...args) {
+  return impl().getRoomPresence?.(...args) || [];
+}
+
+export async function updateUserPresence(...args) {
+  return impl().updateUserPresence?.(...args) || null;
+}

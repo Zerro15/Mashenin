@@ -1,0 +1,10 @@
+{
+  "name": "@mashenin/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test:smoke": "node --test test/smoke.test.js"
+  }
+}

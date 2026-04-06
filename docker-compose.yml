@@ -1,0 +1,87 @@
+services:
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["node", "src/server.js"]
+    volumes:
+      - ./apps/web:/app
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      API_BASE_URL: http://api:4000
+    depends_on:
+      - api
+
+  api:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["node", "src/server.js"]
+    volumes:
+      - ./apps/api:/app
+      - ./packages/shared:/shared
+    ports:
+      - "${API_PORT:-4000}:4000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_URL: redis://redis:${REDIS_PORT:-6379}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_WS_URL: ${LIVEKIT_WS_URL}
+    depends_on:
+      - postgres
+      - redis
+      - livekit
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+
+  turn:
+    image: coturn/coturn:latest
+    command:
+      - -n
+      - --log-file=stdout
+      - --realm=${TURN_REALM}
+      - --user=${TURN_USER}:${TURN_PASSWORD}
+      - --listening-port=3478
+      - --min-port=49160
+      - --max-port=49200
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "49160-49200:49160-49200/udp"
+
+volumes:
+  postgres-data:
