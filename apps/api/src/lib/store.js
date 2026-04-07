@@ -118,3 +118,11 @@ export async function getRoomPresence(...args) {
 export async function updateUserPresence(...args) {
   return impl().updateUserPresence?.(...args) || null;
 }
+
+export async function saveMessage(...args) {
+  return impl().saveMessage?.(...args) || null;
+}
+
+export async function getMessages(...args) {
+  return impl().getMessages?.(...args) || [];
+}

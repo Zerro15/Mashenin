@@ -31,8 +31,8 @@ export default async function chatRoutes(fastify) {
               timestamp: new Date().toISOString()
             };
 
-            // Сохраняем в БД (TODO: реализовать)
-            // await fastify.store.saveMessage(roomId, chatMessage);
+            // Сохраняем в БД
+            await fastify.store.saveMessage(roomId, chatMessage);
 
             // Рассылаем всем в комнате
             fastify.chat.broadcastToRoom(roomId, userId, chatMessage);
@@ -76,8 +76,7 @@ export default async function chatRoutes(fastify) {
     const { roomId } = request.params;
     const { limit = 50, offset = 0 } = request.query;
 
-    // TODO: реализовать получение из БД
-    const messages = []; // await fastify.store.getMessages(roomId, limit, offset);
+    const messages = await fastify.store.getMessages(roomId, limit, offset);
 
     return { ok: true, messages };
   });
@@ -99,8 +98,8 @@ export default async function chatRoutes(fastify) {
       timestamp: new Date().toISOString()
     };
 
-    // Сохраняем в БД (TODO: реализовать)
-    // await fastify.store.saveMessage(roomId, message);
+    // Сохраняем в БД
+    await fastify.store.saveMessage(roomId, message);
 
     // Рассылаем через WebSocket
     fastify.chat.broadcastToRoom(roomId, userId, message);
