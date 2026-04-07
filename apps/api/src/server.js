@@ -14,6 +14,8 @@ import chatPlugin from './plugins/chat.js';
 import chatRoutes from './routes/chat.js';
 import authRoutes from './routes/auth.js';
 import roomRoutes from './routes/rooms.js';
+import friendsRoutes from './routes/friends.js';
+import eventsRoutes from './routes/events.js';
 
 async function buildServer() {
   const fastify = Fastify({
@@ -58,6 +60,8 @@ async function buildServer() {
   await fastify.register(authRoutes, { prefix: '/api/auth' });
   await fastify.register(roomRoutes, { prefix: '/api/rooms' });
   await fastify.register(chatRoutes, { prefix: '/api' });
+  await fastify.register(friendsRoutes, { prefix: '/api/friends' });
+  await fastify.register(eventsRoutes, { prefix: '/api/events' });
 
   // Health check эндпоинт
   fastify.get('/health', async () => {
