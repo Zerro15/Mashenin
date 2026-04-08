@@ -1,4 +1,5 @@
-import { GetServerSideProps } from 'next';
+import { useEffect, useState } from 'react';
+import Header from '../components/layout/Header';
 import { createApiClient } from '../lib/api';
 
 interface Room {
@@ -9,24 +10,65 @@ interface Room {
   members: number;
 }
 
-interface RoomsPageProps {
-  rooms: Room[];
-}
+const apiClient = createApiClient();
 
-export default function Rooms({ rooms }: RoomsPageProps) {
+export default function Rooms() {
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadRooms() {
+      try {
+        const response = await apiClient.get('/api/rooms');
+
+        if (!isActive) {
+          return;
+        }
+
+        setRooms(response.data?.ok ? response.data.rooms || [] : []);
+        setError('');
+      } catch (loadError) {
+        if (!isActive) {
+          return;
+        }
+
+        console.error('Failed to fetch rooms:', loadError);
+        setRooms([]);
+        setError('Не удалось загрузить комнаты.');
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadRooms();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
   return (
     <div className="container">
-      <header className="header">
-        <h1>Комнаты</h1>
-        <a href="/create" className="button">
-          Создать комнату
-        </a>
-      </header>
+      <Header />
 
       <main className="main">
+        <section className="page-intro">
+          <h1>Комнаты</h1>
+          <p>Выбери комнату и открой текстовый поток.</p>
+        </section>
+
         <section className="room-list">
-          {rooms.length === 0 ? (
-            <p className="empty">Пока нет комнат. Создайте первую!</p>
+          {isLoading ? (
+            <p className="empty">Загрузка комнат...</p>
+          ) : error ? (
+            <p className="empty">{error}</p>
+          ) : rooms.length === 0 ? (
+            <p className="empty">Пока нет комнат.</p>
           ) : (
             <div className="grid">
               {rooms.map((room) => (
@@ -45,23 +87,3 @@ export default function Rooms({ rooms }: RoomsPageProps) {
     </div>
   );
 }
-
-export const getServerSideProps: GetServerSideProps = async () => {
-  try {
-    const apiClient = createApiClient('http://api:4000');
-    const response = await apiClient.get('/rooms');
-
-    return {
-      props: {
-        rooms: response.data?.ok ? response.data.rooms : []
-      }
-    };
-  } catch (error) {
-    console.error('Failed to fetch rooms:', error);
-    return {
-      props: {
-        rooms: []
-      }
-    };
-  }
-};

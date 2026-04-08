@@ -11,6 +11,7 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       API_BASE_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: http://localhost:4100
     depends_on:
       - api
 

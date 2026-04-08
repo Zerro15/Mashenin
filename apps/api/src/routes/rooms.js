@@ -1,6 +1,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createLiveKitToken } from '../lib/livekit-token.js';
 
+function getSessionToken(request) {
+  const authHeader = request.headers.authorization;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+
+  return request.headers['x-session-token'] || null;
+}
+
 export default async function roomRoutes(fastify) {
   // Получить список комнат пользователя
   fastify.get('/', async (request, reply) => {
@@ -18,23 +28,74 @@ export default async function roomRoutes(fastify) {
     const { roomId } = request.params;
 
     try {
-      const room = await fastify.store.getRoom(roomId);
+      const room = await fastify.store.getRoomById(roomId);
       if (!room) {
         return reply.status(404).send({ ok: false, error: 'room_not_found' });
       }
 
-      // Получаем список участников
-      const members = await fastify.store.getRoomMembers(roomId);
-
       return {
         ok: true,
-        room: {
-          ...room,
-          members
-        }
+        room
       };
     } catch (error) {
       fastify.log.error('Error fetching room:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
+  // Получить историю сообщений комнаты
+  fastify.get('/:roomId/messages', async (request, reply) => {
+    const { roomId } = request.params;
+
+    try {
+      const room = await fastify.store.getRoomById(roomId);
+      if (!room) {
+        return reply.status(404).send({ ok: false, error: 'room_not_found' });
+      }
+
+      const messages = await fastify.store.getMessagesForRoom(roomId);
+
+      return {
+        ok: true,
+        messages
+      };
+    } catch (error) {
+      fastify.log.error('Error fetching room messages:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
+  // Отправить сообщение в комнату
+  fastify.post('/:roomId/messages', async (request, reply) => {
+    const { roomId } = request.params;
+    const token = getSessionToken(request);
+    const body = String(request.body?.body || '').trim();
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    if (!body) {
+      return reply.status(400).send({ ok: false, error: 'message_body_required' });
+    }
+
+    try {
+      const message = await fastify.store.createMessage({
+        token,
+        roomId,
+        body
+      });
+
+      if (!message) {
+        return reply.status(400).send({ ok: false, error: 'message_create_failed' });
+      }
+
+      return {
+        ok: true,
+        message
+      };
+    } catch (error) {
+      fastify.log.error('Error creating room message:', error);
       return reply.status(500).send({ ok: false, error: 'internal_error' });
     }
   });

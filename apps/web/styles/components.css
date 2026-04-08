@@ -75,3 +75,165 @@
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
 }
+
+.page-intro {
+  margin-bottom: 1.5rem;
+}
+
+.page-intro h1 {
+  margin: 0 0 0.5rem;
+}
+
+.page-intro p {
+  margin: 0;
+  color: #64748b;
+}
+
+.auth-page {
+  display: flex;
+  justify-content: center;
+}
+
+.auth-card,
+.room-meta-card,
+.room-chat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 2rem;
+}
+
+.auth-card h1 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.auth-card p {
+  margin-top: 0;
+  color: #64748b;
+}
+
+.stack-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.field-block {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field-block span {
+  font-weight: 500;
+}
+
+.text-input,
+.text-area {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+  color: #1e293b;
+  background: #fff;
+}
+
+.text-area {
+  resize: vertical;
+}
+
+.form-error {
+  margin: 0;
+  color: #dc2626;
+}
+
+.room-shell {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.room-meta-card,
+.room-chat-card {
+  padding: 1.5rem;
+}
+
+.room-meta-card h1 {
+  margin: 0 0 0.5rem;
+}
+
+.room-meta-card p {
+  margin: 0 0 1rem;
+  color: #64748b;
+}
+
+.room-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.chat-header h2 {
+  margin: 0;
+}
+
+.chat-header a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.message-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.message-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: #f8fafc;
+}
+
+.message-item p {
+  margin: 0.4rem 0 0;
+}
+
+.message-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+
+.message-topline span {
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.composer-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.composer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
