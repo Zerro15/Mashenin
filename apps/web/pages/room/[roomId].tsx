@@ -262,30 +262,34 @@ export default function RoomPage() {
                 ) : (
                   messages.map((message) => (
                     <article key={message.id} className="message-item">
-                      <div className="message-topline">
-                        <strong>{message.author}</strong>
-                        <span>{formatTimestamp(message.sentAt)}</span>
+                      <div className="message-bubble">
+                        <div className="message-topline">
+                          <strong className="message-author">{message.author}</strong>
+                          <span className="message-time">{formatTimestamp(message.sentAt)}</span>
+                        </div>
+                        <p className="message-text">{message.text}</p>
                       </div>
-                      <p>{message.text}</p>
                     </article>
                   ))
                 )}
               </div>
 
               <form className="composer-form" onSubmit={handleSubmit}>
-                <textarea
-                  className="text-area"
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder={`Напиши сообщение в ${room.name}`}
-                  rows={3}
-                />
+                <div className="composer-shell">
+                  <textarea
+                    className="text-area"
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    placeholder={`Напиши сообщение в ${room.name}`}
+                    rows={3}
+                  />
 
-                <div className="composer-actions">
-                  {sendError ? <p className="form-error">{sendError}</p> : <span />}
-                  <button className="button" type="submit" disabled={isSending || !draft.trim()}>
-                    {isSending ? 'Отправка...' : 'Отправить'}
-                  </button>
+                  <div className="composer-actions">
+                    {sendError ? <p className="form-error">{sendError}</p> : <span className="composer-hint">Ответ в эту комнату</span>}
+                    <button className="button" type="submit" disabled={isSending || !draft.trim()}>
+                      {isSending ? 'Отправка...' : 'Отправить'}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
