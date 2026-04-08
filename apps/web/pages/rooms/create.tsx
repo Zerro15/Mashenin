@@ -4,6 +4,8 @@ import Header from '../../components/layout/Header';
 import { createApiClient } from '../../lib/api';
 import { useAuthRoute } from '../../lib/session';
 
+type CreateRoomSubmitState = 'idle' | 'submitting' | 'success' | 'error';
+
 const apiClient = createApiClient();
 
 export default function CreateRoomPage() {
@@ -11,19 +13,28 @@ export default function CreateRoomPage() {
   const { user, isChecking, logout } = useAuthRoute('protected');
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
-  const [error, setError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitState, setSubmitState] = useState<CreateRoomSubmitState>('idle');
+  const [submitError, setSubmitError] = useState('');
+
+  const isSubmitting = submitState === 'submitting';
+  const isRedirecting = submitState === 'success';
+  const isFormLocked = isChecking || isSubmitting || isRedirecting;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!name.trim()) {
-      setError('Название комнаты обязательно.');
+    if (isFormLocked) {
       return;
     }
 
-    setIsSubmitting(true);
-    setError('');
+    if (!name.trim()) {
+      setSubmitState('error');
+      setSubmitError('Название комнаты обязательно.');
+      return;
+    }
+
+    setSubmitState('submitting');
+    setSubmitError('');
 
     try {
       const response = await apiClient.post('/api/rooms', {
@@ -32,11 +43,13 @@ export default function CreateRoomPage() {
       });
 
       if (!response.data?.ok || !response.data?.room?.id) {
-        setError('Не удалось создать комнату.');
+        setSubmitState('error');
+        setSubmitError('Не удалось создать комнату.');
         return;
       }
 
-      router.push(`/room/${response.data.room.id}`);
+      setSubmitState('success');
+      await router.push(`/room/${response.data.room.id}`);
     } catch (submitError: any) {
       const nextError =
         submitError?.response?.status === 401
@@ -45,9 +58,8 @@ export default function CreateRoomPage() {
             ? 'Название комнаты обязательно.'
             : 'Не удалось создать комнату.';
 
-      setError(nextError);
-    } finally {
-      setIsSubmitting(false);
+      setSubmitState('error');
+      setSubmitError(nextError);
     }
   }
 
@@ -73,6 +85,7 @@ export default function CreateRoomPage() {
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Например, Команда"
                   maxLength={64}
+                  disabled={isFormLocked}
                   required
                 />
               </label>
@@ -86,17 +99,28 @@ export default function CreateRoomPage() {
                   placeholder="Коротко опиши, для чего нужна эта комната"
                   rows={4}
                   maxLength={160}
+                  disabled={isFormLocked}
                 />
               </label>
 
-              {error ? <p className="form-error">{error}</p> : null}
+              {submitState === 'error' && submitError ? <p className="form-error">{submitError}</p> : null}
+              {isRedirecting ? <p>Комната создана. Открываем...</p> : null}
 
               <div className="form-actions">
-                <a className="button button-secondary" href="/rooms">
+                <a
+                  className="button button-secondary"
+                  href="/rooms"
+                  aria-disabled={isFormLocked}
+                  onClick={(event) => {
+                    if (isFormLocked) {
+                      event.preventDefault();
+                    }
+                  }}
+                >
                   Назад
                 </a>
-                <button className="button" type="submit" disabled={isSubmitting || isChecking}>
-                  {isSubmitting ? 'Создание...' : 'Создать комнату'}
+                <button className="button" type="submit" disabled={isFormLocked}>
+                  {isSubmitting ? 'Создание...' : isRedirecting ? 'Открываем...' : 'Создать комнату'}
                 </button>
               </div>
             </form>
