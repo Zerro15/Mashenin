@@ -2,13 +2,17 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../components/layout/Header';
 import { createApiClient, setSessionToken } from '../lib/api';
-import { useAuthRoute } from '../lib/session';
+import { getSafeLocalPath, useAuthRoute } from '../lib/session';
 
 const apiClient = createApiClient();
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, isChecking } = useAuthRoute('guest');
+  const nextPath = getSafeLocalPath(
+    typeof router.query.next === 'string' ? router.query.next : undefined,
+    '/rooms'
+  );
+  const { user, isChecking } = useAuthRoute('guest', { guestRedirectTo: nextPath });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -31,7 +35,7 @@ export default function LoginPage() {
       }
 
       setSessionToken(response.data.token);
-      router.push('/rooms');
+      router.push(nextPath);
     } catch (submitError: any) {
       const nextError =
         submitError?.response?.data?.error === 'invalid_email_or_password'
@@ -92,7 +96,7 @@ export default function LoginPage() {
               </form>
 
               <p className="auth-switch">
-                Еще нет аккаунта? <a href="/register">Создай его</a>.
+                Еще нет аккаунта? <a href={`/register?next=${encodeURIComponent(nextPath)}`}>Создай его</a>.
               </p>
             </>
           )}

@@ -8,7 +8,11 @@ export interface SessionUser {
   email?: string | null;
 }
 
-type AuthMode = 'guest' | 'protected';
+type AuthMode = 'guest' | 'protected' | 'optional';
+
+interface UseAuthRouteOptions {
+  guestRedirectTo?: string;
+}
 
 interface UseAuthRouteResult {
   user: SessionUser | null;
@@ -16,10 +20,23 @@ interface UseAuthRouteResult {
   logout: () => Promise<void>;
 }
 
-export function useAuthRoute(mode: AuthMode): UseAuthRouteResult {
+export function getSafeLocalPath(value: unknown, fallback = '/rooms') {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  if (!value.startsWith('/') || value.startsWith('//')) {
+    return fallback;
+  }
+
+  return value;
+}
+
+export function useAuthRoute(mode: AuthMode, options: UseAuthRouteOptions = {}): UseAuthRouteResult {
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isChecking, setIsChecking] = useState(true);
+  const guestRedirectTo = getSafeLocalPath(options.guestRedirectTo, '/rooms');
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -63,7 +80,7 @@ export function useAuthRoute(mode: AuthMode): UseAuthRouteResult {
         setUser(response.data.user);
 
         if (mode === 'guest') {
-          router.replace('/rooms');
+          router.replace(guestRedirectTo);
         }
       } catch (error: any) {
         if (!isActive) {
@@ -91,7 +108,7 @@ export function useAuthRoute(mode: AuthMode): UseAuthRouteResult {
     return () => {
       isActive = false;
     };
-  }, [mode, router]);
+  }, [guestRedirectTo, mode, router]);
 
   async function logout() {
     try {

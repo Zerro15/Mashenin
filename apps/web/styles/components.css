@@ -171,6 +171,51 @@
   line-height: 1.5;
 }
 
+.invite-card {
+  max-width: 720px;
+  text-align: left;
+}
+
+.invite-card h1,
+.invite-card h2 {
+  text-align: left;
+}
+
+.invite-card p {
+  text-align: left;
+  line-height: 1.55;
+}
+
+.invite-preview {
+  margin: 1.5rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 0.75rem;
+  background: #f8fbff;
+}
+
+.invite-preview-meta {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  color: #475569;
+}
+
+.invite-preview-meta strong {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.invite-note {
+  margin: 1rem 0 0;
+  color: #64748b;
+}
+
+.invite-actions {
+  justify-content: flex-start;
+  margin-top: 1.5rem;
+}
+
 .auth-card h1 {
   margin-top: 0;
   margin-bottom: 0.5rem;

@@ -2,13 +2,17 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../components/layout/Header';
 import { createApiClient, setSessionToken } from '../lib/api';
-import { useAuthRoute } from '../lib/session';
+import { getSafeLocalPath, useAuthRoute } from '../lib/session';
 
 const apiClient = createApiClient();
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { user, isChecking } = useAuthRoute('guest');
+  const nextPath = getSafeLocalPath(
+    typeof router.query.next === 'string' ? router.query.next : undefined,
+    '/rooms'
+  );
+  const { user, isChecking } = useAuthRoute('guest', { guestRedirectTo: nextPath });
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,7 +37,7 @@ export default function RegisterPage() {
       }
 
       setSessionToken(response.data.token);
-      router.push('/rooms');
+      router.push(nextPath);
     } catch (submitError: any) {
       const apiError = submitError?.response?.data?.error;
       const nextError =
@@ -113,7 +117,7 @@ export default function RegisterPage() {
               </form>
 
               <p className="auth-switch">
-                Уже есть аккаунт? <a href="/login">Войди</a>.
+                Уже есть аккаунт? <a href={`/login?next=${encodeURIComponent(nextPath)}`}>Войди</a>.
               </p>
             </>
           )}
