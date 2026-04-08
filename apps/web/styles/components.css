@@ -202,6 +202,15 @@
   font-weight: 500;
 }
 
+.field-block-secondary span {
+  color: #475569;
+}
+
+.field-optional {
+  font-weight: 400;
+  color: #64748b;
+}
+
 .text-input,
 .text-area {
   width: 100%;
@@ -215,6 +224,16 @@
 
 .text-area {
   resize: vertical;
+}
+
+.field-hint {
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.field-hint-strong {
+  color: #334155;
 }
 
 .form-error {

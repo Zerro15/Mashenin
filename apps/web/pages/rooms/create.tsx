@@ -73,11 +73,11 @@ export default function CreateRoomPage() {
         ) : (
           <section className="auth-card">
             <h1>Новая комната</h1>
-            <p>Создай новую текстовую комнату и сразу перейди в нее.</p>
+            <p>Для первого разговора достаточно только названия комнаты. После создания ты сразу перейдешь внутрь.</p>
 
             <form className="stack-form" onSubmit={handleSubmit}>
               <label className="field-block">
-                <span>Название</span>
+                <span>Название комнаты</span>
                 <input
                   className="text-input"
                   type="text"
@@ -88,19 +88,21 @@ export default function CreateRoomPage() {
                   disabled={isFormLocked}
                   required
                 />
+                <small className="field-hint field-hint-strong">Это главное поле. Одного названия уже достаточно, чтобы создать комнату.</small>
               </label>
 
-              <label className="field-block">
-                <span>Тема</span>
+              <label className="field-block field-block-secondary">
+                <span>Тема <span className="field-optional">необязательно</span></span>
                 <textarea
                   className="text-area"
                   value={topic}
                   onChange={(event) => setTopic(event.target.value)}
-                  placeholder="Коротко опиши, для чего нужна эта комната"
-                  rows={4}
+                  placeholder="Если хочешь, коротко опиши, для чего нужна эта комната"
+                  rows={3}
                   maxLength={160}
                   disabled={isFormLocked}
                 />
+                <small className="field-hint">Можно пропустить и добавить позже, если это вообще понадобится.</small>
               </label>
 
               {submitState === 'error' && submitError ? <p className="form-error">{submitError}</p> : null}
