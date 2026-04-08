@@ -544,6 +544,7 @@
 .composer-hint {
   color: #64748b;
   font-size: 0.9rem;
+  transition: color 0.2s ease;
 }
 
 .header-nav {

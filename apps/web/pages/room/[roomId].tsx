@@ -23,8 +23,10 @@ type RoomLoadState = 'idle' | 'loading' | 'ready' | 'not_found' | 'error';
 type MessagesLoadState = 'idle' | 'loading' | 'ready' | 'error';
 type InviteCreateState = 'idle' | 'loading' | 'ready' | 'error';
 type InviteCopyState = 'idle' | 'success' | 'error';
+type MessagesSyncState = 'idle' | 'syncing';
 
 const apiClient = createApiClient();
+const ROOM_MESSAGES_POLL_INTERVAL_MS = 5000;
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString('ru-RU');
@@ -40,6 +42,22 @@ function formatMembersLabel(count: number) {
   }
 
   return `${count} участников`;
+}
+
+function mergeMessages(currentMessages: RoomMessage[], nextMessages: RoomMessage[]) {
+  const byId = new Map<string, RoomMessage>();
+
+  for (const message of currentMessages) {
+    byId.set(message.id, message);
+  }
+
+  for (const message of nextMessages) {
+    byId.set(message.id, message);
+  }
+
+  return Array.from(byId.values()).sort(
+    (left, right) => new Date(left.sentAt).getTime() - new Date(right.sentAt).getTime()
+  );
 }
 
 export default function RoomPage() {
@@ -60,6 +78,7 @@ export default function RoomPage() {
   const [inviteLink, setInviteLink] = useState('');
   const [inviteError, setInviteError] = useState('');
   const [inviteCopyState, setInviteCopyState] = useState<InviteCopyState>('idle');
+  const [messagesSyncState, setMessagesSyncState] = useState<MessagesSyncState>('idle');
   const [roomReloadKey, setRoomReloadKey] = useState(0);
   const [messagesReloadKey, setMessagesReloadKey] = useState(0);
 
@@ -79,6 +98,7 @@ export default function RoomPage() {
       setInviteLink('');
       setInviteError('');
       setInviteCopyState('idle');
+      setMessagesSyncState('idle');
       setRoom(null);
       setMessages([]);
       setMessagesState('idle');
@@ -137,6 +157,7 @@ export default function RoomPage() {
     async function loadMessages() {
       setMessagesState('loading');
       setMessagesError('');
+      setMessagesSyncState('idle');
       setMessages([]);
 
       try {
@@ -166,6 +187,56 @@ export default function RoomPage() {
       isActive = false;
     };
   }, [isChecking, messagesReloadKey, room, user]);
+
+  useEffect(() => {
+    if (!room || isChecking || !user || messagesState !== 'ready') {
+      return;
+    }
+
+    let isActive = true;
+    let isRefreshing = false;
+
+    async function refreshMessages() {
+      if (isRefreshing) {
+        return;
+      }
+
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+
+      isRefreshing = true;
+      setMessagesSyncState('syncing');
+
+      try {
+        const messagesResponse = await apiClient.get(`/api/rooms/${room.id}/messages`);
+
+        if (!isActive) {
+          return;
+        }
+
+        const nextMessages = messagesResponse.data?.ok ? messagesResponse.data.messages || [] : [];
+        setMessages((currentMessages) => mergeMessages(currentMessages, nextMessages));
+      } catch (loadError) {
+        if (isActive) {
+          console.error('Failed to refresh messages:', loadError);
+        }
+      } finally {
+        if (isActive) {
+          setMessagesSyncState('idle');
+        }
+
+        isRefreshing = false;
+      }
+    }
+
+    const intervalId = window.setInterval(refreshMessages, ROOM_MESSAGES_POLL_INTERVAL_MS);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
+  }, [isChecking, messagesState, room, user]);
 
   async function handleCreateInvite() {
     if (!roomId || inviteCreateState === 'loading' || inviteLink) {
@@ -402,7 +473,13 @@ export default function RoomPage() {
                   />
 
                   <div className="composer-actions">
-                    {sendError ? <p className="form-error">{sendError}</p> : <span className="composer-hint">Ответ в эту комнату</span>}
+                    {sendError ? (
+                      <p className="form-error">{sendError}</p>
+                    ) : (
+                      <span className="composer-hint">
+                        {messagesSyncState === 'syncing' ? 'Обновляется...' : 'Ответ в эту комнату'}
+                      </span>
+                    )}
                     <button className="button" type="submit" disabled={isSending || !draft.trim()}>
                       {isSending ? 'Отправка...' : 'Отправить'}
                     </button>
