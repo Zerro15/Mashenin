@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Header from '../components/layout/Header';
 import { createApiClient } from '../lib/api';
+import { useAuthRoute } from '../lib/session';
 
 interface Room {
   id: string;
@@ -13,11 +14,16 @@ interface Room {
 const apiClient = createApiClient();
 
 export default function Rooms() {
+  const { user, isChecking, logout } = useAuthRoute('protected');
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (isChecking || !user) {
+      return;
+    }
+
     let isActive = true;
 
     async function loadRooms() {
@@ -50,39 +56,45 @@ export default function Rooms() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [isChecking, user]);
 
   return (
     <div className="container">
-      <Header requireAuth />
+      <Header user={user} isCheckingSession={isChecking} onLogout={logout} />
 
       <main className="main">
-        <section className="page-intro">
-          <h1>Комнаты</h1>
-          <p>Выбери комнату и открой текстовый поток.</p>
-        </section>
+        {isChecking ? (
+          <p className="empty">Проверка сессии...</p>
+        ) : (
+          <>
+            <section className="page-intro">
+              <h1>Комнаты</h1>
+              <p>Выбери комнату и открой текстовый поток.</p>
+            </section>
 
-        <section className="room-list">
-          {isLoading ? (
-            <p className="empty">Загрузка комнат...</p>
-          ) : error ? (
-            <p className="empty">{error}</p>
-          ) : rooms.length === 0 ? (
-            <p className="empty">Пока нет комнат.</p>
-          ) : (
-            <div className="grid">
-              {rooms.map((room) => (
-                <a key={room.id} href={`/room/${room.id}`} className="room-card">
-                  <h3>{room.name}</h3>
-                  <p>{room.topic}</p>
-                  <div className="members">
-                    <span>{room.members}</span> участников
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </section>
+            <section className="room-list">
+              {isLoading ? (
+                <p className="empty">Загрузка комнат...</p>
+              ) : error ? (
+                <p className="empty">{error}</p>
+              ) : rooms.length === 0 ? (
+                <p className="empty">Пока нет комнат.</p>
+              ) : (
+                <div className="grid">
+                  {rooms.map((room) => (
+                    <a key={room.id} href={`/room/${room.id}`} className="room-card">
+                      <h3>{room.name}</h3>
+                      <p>{room.topic}</p>
+                      <div className="members">
+                        <span>{room.members}</span> участников
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </main>
     </div>
   );

@@ -1,57 +1,18 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../components/layout/Header';
-import { clearSessionToken, createApiClient, getSessionToken, setSessionToken } from '../lib/api';
+import { createApiClient, setSessionToken } from '../lib/api';
+import { useAuthRoute } from '../lib/session';
 
 const apiClient = createApiClient();
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user, isChecking } = useAuthRoute('guest');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const token = getSessionToken();
-
-    if (!token) {
-      return;
-    }
-
-    let isActive = true;
-
-    async function validateSession() {
-      try {
-        const response = await apiClient.get('/api/auth/me');
-
-        if (!isActive) {
-          return;
-        }
-
-        if (response.data?.ok && response.data?.user) {
-          router.replace('/rooms');
-          return;
-        }
-
-        clearSessionToken();
-      } catch {
-        if (isActive) {
-          clearSessionToken();
-        }
-      }
-    }
-
-    validateSession();
-
-    return () => {
-      isActive = false;
-    };
-  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,42 +46,50 @@ export default function LoginPage() {
 
   return (
     <div className="container">
-      <Header />
+      <Header user={user} isCheckingSession={isChecking} />
 
       <main className="main auth-page">
         <section className="auth-card">
           <h1>Вход</h1>
-          <p>Войди в аккаунт, чтобы открыть комнату и отправлять сообщения.</p>
+          <p>
+            {isChecking
+              ? 'Проверяю активную сессию...'
+              : 'Войди в аккаунт, чтобы открыть комнату и отправлять сообщения.'}
+          </p>
 
-          <form className="stack-form" onSubmit={handleSubmit}>
-            <label className="field-block">
-              <span>Email</span>
-              <input
-                className="text-input"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
+          {isChecking ? (
+            <p className="empty">Проверка сессии...</p>
+          ) : (
+            <form className="stack-form" onSubmit={handleSubmit}>
+              <label className="field-block">
+                <span>Email</span>
+                <input
+                  className="text-input"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </label>
 
-            <label className="field-block">
-              <span>Пароль</span>
-              <input
-                className="text-input"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
+              <label className="field-block">
+                <span>Пароль</span>
+                <input
+                  className="text-input"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </label>
 
-            {error ? <p className="form-error">{error}</p> : null}
+              {error ? <p className="form-error">{error}</p> : null}
 
-            <button className="button" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Вход...' : 'Войти'}
-            </button>
-          </form>
+              <button className="button" type="submit" disabled={isSubmitting || isChecking}>
+                {isSubmitting ? 'Вход...' : 'Войти'}
+              </button>
+            </form>
+          )}
         </section>
       </main>
     </div>

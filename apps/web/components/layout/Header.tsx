@@ -1,101 +1,31 @@
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
-import { apiClient, clearSessionToken, getSessionToken } from '../../lib/api';
+import { useState } from 'react';
+import type { SessionUser } from '../../lib/session';
 
 interface HeaderProps {
-  requireAuth?: boolean;
+  user?: SessionUser | null;
+  isCheckingSession?: boolean;
+  onLogout?: () => Promise<void>;
 }
 
-interface SessionUser {
-  id: string;
-  name: string;
-  email?: string | null;
-}
-
-export default function Header({ requireAuth = false }: HeaderProps) {
-  const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [isLoading, setIsLoading] = useState(requireAuth);
+export default function Header({
+  user = null,
+  isCheckingSession = false,
+  onLogout
+}: HeaderProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const token = getSessionToken();
-
-    if (!token) {
-      setUser(null);
-      setIsLoading(false);
-
-      if (requireAuth) {
-        router.replace('/login');
-      }
-
-      return;
-    }
-
-    let isActive = true;
-
-    async function loadCurrentUser() {
-      try {
-        const response = await apiClient.get('/api/auth/me');
-
-        if (!isActive) {
-          return;
-        }
-
-        if (!response.data?.ok || !response.data?.user) {
-          clearSessionToken();
-          setUser(null);
-
-          if (requireAuth) {
-            router.replace('/login');
-          }
-
-          return;
-        }
-
-        setUser(response.data.user);
-      } catch (error: any) {
-        if (!isActive) {
-          return;
-        }
-
-        if (error?.response?.status === 401) {
-          clearSessionToken();
-          setUser(null);
-
-          if (requireAuth) {
-            router.replace('/login');
-          }
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadCurrentUser();
-
-    return () => {
-      isActive = false;
-    };
-  }, [requireAuth, router]);
-
   async function handleLogout() {
+    if (!onLogout) {
+      return;
+    }
+
     setIsLoggingOut(true);
 
     try {
-      await apiClient.post('/api/auth/logout');
-    } catch {}
-
-    clearSessionToken();
-    setUser(null);
-    setIsLoggingOut(false);
-    router.replace('/login');
+      await onLogout();
+    } finally {
+      setIsLoggingOut(false);
+    }
   }
 
   return (
@@ -112,7 +42,7 @@ export default function Header({ requireAuth = false }: HeaderProps) {
       </nav>
 
       <div className="header-session">
-        {isLoading ? (
+        {isCheckingSession ? (
           <span className="session-muted">Проверка сессии...</span>
         ) : user ? (
           <>
@@ -124,7 +54,7 @@ export default function Header({ requireAuth = false }: HeaderProps) {
               className="button button-secondary"
               type="button"
               onClick={handleLogout}
-              disabled={isLoggingOut}
+              disabled={isLoggingOut || !onLogout}
             >
               {isLoggingOut ? 'Выход...' : 'Выйти'}
             </button>

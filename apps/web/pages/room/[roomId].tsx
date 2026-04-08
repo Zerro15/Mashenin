@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../../components/layout/Header';
-import { createApiClient, getSessionToken } from '../../lib/api';
+import { createApiClient } from '../../lib/api';
+import { useAuthRoute } from '../../lib/session';
 
 interface RoomMessage {
   id: string;
@@ -27,6 +28,7 @@ function formatTimestamp(value: string) {
 export default function RoomPage() {
   const router = useRouter();
   const roomId = typeof router.query.roomId === 'string' ? router.query.roomId : '';
+  const { user, isChecking, logout } = useAuthRoute('protected');
 
   const [room, setRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<RoomMessage[]>([]);
@@ -36,12 +38,7 @@ export default function RoomPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!roomId) {
-      return;
-    }
-
-    if (typeof window !== 'undefined' && !getSessionToken()) {
-      router.replace('/login');
+    if (!roomId || isChecking || !user) {
       return;
     }
 
@@ -89,7 +86,7 @@ export default function RoomPage() {
     return () => {
       isActive = false;
     };
-  }, [roomId, router]);
+  }, [roomId, router, isChecking, user]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,10 +124,12 @@ export default function RoomPage() {
 
   return (
     <div className="container">
-      <Header requireAuth />
+      <Header user={user} isCheckingSession={isChecking} onLogout={logout} />
 
       <main className="main">
-        {isLoading ? (
+        {isChecking ? (
+          <p className="empty">Проверка сессии...</p>
+        ) : isLoading ? (
           <p className="empty">Загрузка комнаты...</p>
         ) : error && !room ? (
           <p className="empty">{error}</p>

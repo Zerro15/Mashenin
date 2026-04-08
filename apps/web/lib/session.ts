@@ -1,0 +1,111 @@
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import { apiClient, clearSessionToken, getSessionToken } from './api';
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  email?: string | null;
+}
+
+type AuthMode = 'guest' | 'protected';
+
+interface UseAuthRouteResult {
+  user: SessionUser | null;
+  isChecking: boolean;
+  logout: () => Promise<void>;
+}
+
+export function useAuthRoute(mode: AuthMode): UseAuthRouteResult {
+  const router = useRouter();
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const token = getSessionToken();
+
+    if (!token) {
+      setUser(null);
+      setIsChecking(false);
+
+      if (mode === 'protected') {
+        router.replace('/login');
+      }
+
+      return;
+    }
+
+    let isActive = true;
+
+    async function resolveSession() {
+      try {
+        const response = await apiClient.get('/api/auth/me');
+
+        if (!isActive) {
+          return;
+        }
+
+        if (!response.data?.ok || !response.data?.user) {
+          clearSessionToken();
+          setUser(null);
+
+          if (mode === 'protected') {
+            router.replace('/login');
+          }
+
+          return;
+        }
+
+        setUser(response.data.user);
+
+        if (mode === 'guest') {
+          router.replace('/rooms');
+        }
+      } catch (error: any) {
+        if (!isActive) {
+          return;
+        }
+
+        if (error?.response?.status === 401) {
+          clearSessionToken();
+        }
+
+        setUser(null);
+
+        if (mode === 'protected') {
+          router.replace('/login');
+        }
+      } finally {
+        if (isActive) {
+          setIsChecking(false);
+        }
+      }
+    }
+
+    resolveSession();
+
+    return () => {
+      isActive = false;
+    };
+  }, [mode, router]);
+
+  async function logout() {
+    try {
+      await apiClient.post('/api/auth/logout');
+    } catch {}
+
+    clearSessionToken();
+    setUser(null);
+    router.replace('/login');
+  }
+
+  return {
+    user,
+    isChecking,
+    logout
+  };
+}
