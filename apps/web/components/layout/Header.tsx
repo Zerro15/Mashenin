@@ -34,12 +34,13 @@ export default function Header({
         <h1>mashenin</h1>
       </a>
 
-      <nav className="header-nav">
-        <a href="/rooms">Комнаты</a>
-        <a href="/friends">Люди</a>
-        <a href="/events">События</a>
-        <a href="/settings">Настройки</a>
-      </nav>
+      {user ? (
+        <nav className="header-nav" aria-label="Основная навигация">
+          <a href="/rooms">Комнаты</a>
+        </nav>
+      ) : (
+        <div />
+      )}
 
       <div className="header-session">
         {isCheckingSession ? (

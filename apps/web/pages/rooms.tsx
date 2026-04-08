@@ -84,10 +84,10 @@ export default function Rooms() {
               <div className="page-intro-bar">
                 <div>
                   <h1>Комнаты</h1>
-                  <p>Выбери комнату и открой текстовый поток.</p>
+                  <p>Выбери комнату и продолжи разговор.</p>
                 </div>
                 <a className="button" href="/rooms/create">
-                  Новая комната
+                  Создать комнату
                 </a>
               </div>
             </section>
@@ -108,7 +108,7 @@ export default function Rooms() {
               ) : roomsState === 'empty' ? (
                 <section className="status-card">
                   <h1>Пока нет комнат</h1>
-                  <p>Создай первую комнату и открой текстовый поток.</p>
+                  <p>Создай первую комнату и начни общение.</p>
                   <div className="status-actions">
                     <a className="button" href="/rooms/create">
                       Создать комнату
