@@ -105,7 +105,8 @@
 
 .auth-card,
 .room-meta-card,
-.room-chat-card {
+.room-chat-card,
+.status-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 0.75rem;
@@ -116,6 +117,30 @@
   width: 100%;
   max-width: 460px;
   padding: 2rem;
+}
+
+.status-card {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.status-card h1 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+.status-card p {
+  margin-top: 0;
+  color: #64748b;
+}
+
+.status-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .auth-card h1 {
@@ -219,6 +244,26 @@
   background: #f8fafc;
 }
 
+.inline-state {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.inline-state p {
+  margin: 0;
+}
+
+.inline-state-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
 .message-item p {
   margin: 0.4rem 0 0;
 }
@@ -256,6 +301,15 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .inline-state,
+  .composer-actions,
+  .status-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .session-user {
