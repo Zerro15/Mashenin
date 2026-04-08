@@ -201,6 +201,21 @@
   color: #dc2626;
 }
 
+.auth-switch {
+  margin: 1rem 0 0;
+  color: #64748b;
+  text-align: center;
+}
+
+.auth-switch a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.auth-switch a:hover {
+  text-decoration: underline;
+}
+
 .room-shell {
   display: grid;
   gap: 1.5rem;

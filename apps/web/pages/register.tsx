@@ -6,9 +6,10 @@ import { useAuthRoute } from '../lib/session';
 
 const apiClient = createApiClient();
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
   const { user, isChecking } = useAuthRoute('guest');
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,23 +21,31 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await apiClient.post('/api/auth/login', {
+      const response = await apiClient.post('/api/auth/register', {
+        displayName,
         email,
         password
       });
 
       if (!response.data?.ok || !response.data?.token) {
-        setError('Не удалось войти.');
+        setError('Не удалось создать аккаунт.');
         return;
       }
 
       setSessionToken(response.data.token);
       router.push('/rooms');
     } catch (submitError: any) {
+      const apiError = submitError?.response?.data?.error;
       const nextError =
-        submitError?.response?.data?.error === 'invalid_email_or_password'
-          ? 'Неверный email или пароль.'
-          : 'Не удалось выполнить вход.';
+        apiError === 'password_too_short'
+          ? 'Пароль должен быть не короче 6 символов.'
+          : apiError === 'email_password_and_display_name_required'
+            ? 'Заполни имя, email и пароль.'
+            : apiError === 'invalid_email_or_display_name'
+              ? 'Проверь имя и email.'
+              : apiError === 'registration_failed_maybe_email_exists'
+                ? 'Аккаунт с таким email уже существует.'
+                : 'Не удалось создать аккаунт.';
 
       setError(nextError);
     } finally {
@@ -50,11 +59,11 @@ export default function LoginPage() {
 
       <main className="main auth-page">
         <section className="auth-card">
-          <h1>Вход</h1>
+          <h1>Создать аккаунт</h1>
           <p>
             {isChecking
               ? 'Проверяю активную сессию...'
-              : 'Войди в аккаунт, чтобы открыть комнату и отправлять сообщения.'}
+              : 'Создай аккаунт и сразу перейди в комнаты, чтобы начать общение.'}
           </p>
 
           {isChecking ? (
@@ -62,6 +71,17 @@ export default function LoginPage() {
           ) : (
             <>
               <form className="stack-form" onSubmit={handleSubmit}>
+                <label className="field-block">
+                  <span>Как тебя назвать</span>
+                  <input
+                    className="text-input"
+                    type="text"
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    required
+                  />
+                </label>
+
                 <label className="field-block">
                   <span>Email</span>
                   <input
@@ -80,6 +100,7 @@ export default function LoginPage() {
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
+                    minLength={6}
                     required
                   />
                 </label>
@@ -87,12 +108,12 @@ export default function LoginPage() {
                 {error ? <p className="form-error">{error}</p> : null}
 
                 <button className="button" type="submit" disabled={isSubmitting || isChecking}>
-                  {isSubmitting ? 'Вход...' : 'Войти'}
+                  {isSubmitting ? 'Создаю аккаунт...' : 'Создать аккаунт'}
                 </button>
               </form>
 
               <p className="auth-switch">
-                Еще нет аккаунта? <a href="/register">Создай его</a>.
+                Уже есть аккаунт? <a href="/login">Войди</a>.
               </p>
             </>
           )}

@@ -11,14 +11,17 @@ export default function Home() {
       <main className="main auth-page">
         <section className="status-card">
           <h1>Комнаты для спокойного общения</h1>
-          <p>Открой нужную комнату, прочитай историю и продолжи разговор без лишних разделов и перегруженной навигации.</p>
+          <p>Создай аккаунт, открой нужную комнату и продолжи разговор без лишних настроек и перегруженной навигации.</p>
 
           {isChecking ? (
             <p className="empty">Проверка сессии...</p>
           ) : (
             <div className="status-actions">
-              <a className="button" href="/login">
-                Войти
+              <a className="button" href="/register">
+                Создать аккаунт
+              </a>
+              <a className="button button-secondary" href="/login">
+                У меня уже есть аккаунт
               </a>
             </div>
           )}
