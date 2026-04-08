@@ -1,5 +1,6 @@
 import { getPool } from "./sql.js";
 import { hashPassword, normalizeEmail, verifyPassword } from "./auth.js";
+import crypto from "node:crypto";
 
 function nowPlusSeconds(ttlSeconds) {
   return new Date(Date.now() + ttlSeconds * 1000);
@@ -7,6 +8,10 @@ function nowPlusSeconds(ttlSeconds) {
 
 function buildSessionToken() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function buildInviteCode() {
+  return crypto.randomBytes(4).toString("hex");
 }
 
 function slugifyDisplayName(value) {
@@ -913,6 +918,285 @@ export async function createRoom({ token, name, topic = '' }) {
     };
   } catch (error) {
     await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function createRoomInvite({ token, roomId }) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const user = await getUserBySessionToken(client, token);
+
+    if (!user) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "unauthorized" };
+    }
+
+    const roomResult = await client.query(
+      `
+        SELECT r.id, r.slug
+        FROM rooms r
+        WHERE r.slug = $1
+        LIMIT 1
+      `,
+      [roomId]
+    );
+
+    const room = roomResult.rows[0];
+
+    if (!room) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "room_not_found" };
+    }
+
+    const membershipResult = await client.query(
+      `
+        SELECT 1
+        FROM room_memberships
+        WHERE room_id = $1 AND user_id = $2
+        LIMIT 1
+      `,
+      [room.id, user.id]
+    );
+
+    if (!membershipResult.rows[0]) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "forbidden" };
+    }
+
+    let createdInvite = null;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const code = buildInviteCode();
+      const insertResult = await client.query(
+        `
+          INSERT INTO invite_codes (code, created_by_user_id, room_id, max_uses, used_count, status)
+          VALUES ($1, $2, $3, 1, 0, 'active')
+          ON CONFLICT (code) DO NOTHING
+          RETURNING code
+        `,
+        [code, user.id, room.id]
+      );
+
+      if (insertResult.rows[0]) {
+        createdInvite = {
+          code,
+          roomId: room.slug,
+          path: `/invite/${code}`
+        };
+        break;
+      }
+    }
+
+    if (!createdInvite) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "invite_create_failed" };
+    }
+
+    await client.query("COMMIT");
+
+    return {
+      ok: true,
+      invite: createdInvite
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getRoomInvitePreview(code) {
+  const pool = getPool();
+  const result = await pool.query(
+    `
+      SELECT
+        ic.code,
+        r.slug AS room_id,
+        r.name AS room_name,
+        r.topic AS room_topic,
+        u.id AS created_by_id,
+        u.display_name AS created_by_name
+      FROM invite_codes ic
+      JOIN rooms r ON r.id = ic.room_id
+      LEFT JOIN users u ON u.id = ic.created_by_user_id
+      WHERE ic.code = $1
+        AND ic.room_id IS NOT NULL
+        AND (ic.expires_at IS NULL OR ic.expires_at > NOW())
+        AND ic.status = 'active'
+        AND ic.used_count < ic.max_uses
+      LIMIT 1
+    `,
+    [code]
+  );
+
+  const invite = result.rows[0];
+
+  if (!invite) {
+    return { ok: false, error: "invite_not_found" };
+  }
+
+  return {
+    ok: true,
+    invite: {
+      code: invite.code,
+      roomId: invite.room_id,
+      roomName: invite.room_name,
+      roomTopic: invite.room_topic,
+      createdBy: invite.created_by_id
+        ? {
+            id: invite.created_by_id,
+            name: invite.created_by_name
+          }
+        : null
+    }
+  };
+}
+
+export async function acceptRoomInvite({ token, code }) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const user = await getUserBySessionToken(client, token);
+
+    if (!user) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "unauthorized" };
+    }
+
+    const inviteResult = await client.query(
+      `
+        SELECT
+          ic.id,
+          ic.code,
+          ic.room_id,
+          ic.max_uses,
+          ic.used_count,
+          ic.status,
+          ic.expires_at,
+          r.slug AS room_slug,
+          r.name AS room_name,
+          r.kind AS room_kind,
+          r.topic AS room_topic
+        FROM invite_codes ic
+        LEFT JOIN rooms r ON r.id = ic.room_id
+        WHERE ic.code = $1
+          AND ic.room_id IS NOT NULL
+        FOR UPDATE
+      `,
+      [code]
+    );
+
+    const invite = inviteResult.rows[0];
+
+    if (!invite) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "invite_not_found" };
+    }
+
+    if (!invite.room_slug) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "room_not_found" };
+    }
+
+    const membershipResult = await client.query(
+      `
+        SELECT 1
+        FROM room_memberships
+        WHERE room_id = $1 AND user_id = $2
+        LIMIT 1
+      `,
+      [invite.room_id, user.id]
+    );
+
+    const memberCountResult = await client.query(
+      `
+        SELECT COUNT(*)::int AS members
+        FROM room_memberships
+        WHERE room_id = $1
+      `,
+      [invite.room_id]
+    );
+
+    const room = {
+      id: invite.room_slug,
+      name: invite.room_name,
+      kind: invite.room_kind,
+      topic: invite.room_topic,
+      members: memberCountResult.rows[0]?.members || 0
+    };
+
+    if (membershipResult.rows[0]) {
+      await client.query("COMMIT");
+      return {
+        ok: true,
+        room,
+        joined: false
+      };
+    }
+
+    const isExpired = invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now();
+    const isUnavailable = invite.status !== "active" || invite.used_count >= invite.max_uses || isExpired;
+
+    if (isUnavailable) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "invite_not_found" };
+    }
+
+    await client.query(
+      `
+        INSERT INTO room_memberships (room_id, user_id, role)
+        VALUES ($1, $2, 'member')
+        ON CONFLICT (room_id, user_id) DO NOTHING
+      `,
+      [invite.room_id, user.id]
+    );
+
+    await client.query(
+      `
+        UPDATE invite_codes
+        SET
+          used_count = used_count + 1,
+          status = CASE
+            WHEN used_count + 1 >= max_uses THEN 'exhausted'::invite_status
+            ELSE status
+          END
+        WHERE id = $1
+      `,
+      [invite.id]
+    );
+
+    const nextMemberCountResult = await client.query(
+      `
+        SELECT COUNT(*)::int AS members
+        FROM room_memberships
+        WHERE room_id = $1
+      `,
+      [invite.room_id]
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      ok: true,
+      room: {
+        ...room,
+        members: nextMemberCountResult.rows[0]?.members || room.members
+      },
+      joined: true
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();

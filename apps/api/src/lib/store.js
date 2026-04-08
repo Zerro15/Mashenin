@@ -87,6 +87,18 @@ export async function createRoom(...args) {
   return impl().createRoom?.(...args) || null;
 }
 
+export async function createRoomInvite(...args) {
+  return impl().createRoomInvite?.(...args) || { ok: false, error: "not_supported" };
+}
+
+export async function getRoomInvitePreview(...args) {
+  return impl().getRoomInvitePreview?.(...args) || { ok: false, error: "invite_not_found" };
+}
+
+export async function acceptRoomInvite(...args) {
+  return impl().acceptRoomInvite?.(...args) || { ok: false, error: "invite_not_found" };
+}
+
 export async function createEvent(...args) {
   return impl().createEvent(...args);
 }

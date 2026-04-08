@@ -58,6 +58,44 @@ export default async function roomRoutes(fastify) {
     }
   });
 
+  // Создать invite для комнаты
+  fastify.post('/:roomId/invites', async (request, reply) => {
+    const { roomId } = request.params;
+    const token = getSessionToken(request);
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    try {
+      const result = await fastify.store.createRoomInvite({
+        token,
+        roomId
+      });
+
+      if (!result?.ok) {
+        if (result?.error === 'unauthorized') {
+          return reply.status(401).send({ ok: false, error: 'unauthorized' });
+        }
+
+        if (result?.error === 'room_not_found') {
+          return reply.status(404).send({ ok: false, error: 'room_not_found' });
+        }
+
+        if (result?.error === 'forbidden') {
+          return reply.status(403).send({ ok: false, error: 'forbidden' });
+        }
+
+        return reply.status(400).send({ ok: false, error: result?.error || 'invite_create_failed' });
+      }
+
+      return result;
+    } catch (error) {
+      fastify.log.error('Error creating room invite:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
   // Получить информацию о комнате
   fastify.get('/:roomId', async (request, reply) => {
     const { roomId } = request.params;

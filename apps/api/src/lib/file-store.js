@@ -57,7 +57,14 @@ function normalizeState(state) {
   state.rooms = state.rooms || [];
   state.events = state.events || [];
   state.messages = state.messages || [];
-  state.inviteCodes = state.inviteCodes || [];
+  state.inviteCodes = (state.inviteCodes || []).map((invite) => ({
+    ...invite,
+    maxUses: Number(invite.maxUses || invite.availableSlots || 1),
+    usedCount: Number(invite.usedCount || 0),
+    status: invite.status || "active",
+    roomId: invite.roomId || null,
+    createdByUserId: invite.createdByUserId || null
+  }));
   state.sessions = state.sessions || [];
   state.roomMemberships = state.roomMemberships || [];
   return state;
@@ -150,6 +157,39 @@ function buildSessionPayload(user, ttlSeconds, state) {
     token: session.token,
     user: publicUser(user),
     expiresAt: session.expiresAt
+  };
+}
+
+function buildInviteCode() {
+  return crypto.randomBytes(4).toString("hex");
+}
+
+function findRoomRecord(state, roomId) {
+  return state.rooms.find((entry) => entry.id === roomId || entry.slug === roomId) || null;
+}
+
+function isRoomInviteActive(invite) {
+  if (!invite || !invite.roomId) {
+    return false;
+  }
+
+  const maxUses = Number(invite.maxUses || 1);
+  const usedCount = Number(invite.usedCount || 0);
+
+  return (invite.status || "active") === "active" && usedCount < maxUses;
+}
+
+function getRoomMembershipCount(state, roomId) {
+  return (state.roomMemberships || []).filter((membership) => membership.roomId === roomId).length;
+}
+
+function mapRoomSummary(state, room) {
+  return {
+    id: room.id,
+    name: room.name,
+    kind: room.kind,
+    topic: room.topic,
+    members: getRoomMembershipCount(state, room.id)
   };
 }
 
@@ -375,6 +415,166 @@ export async function createRoom({ token, name, topic = '' }) {
   });
 
   return createdRoom;
+}
+
+export async function createRoomInvite({ token, roomId }) {
+  let result = { ok: false, error: "internal_error" };
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const room = findRoomRecord(state, roomId);
+
+    if (!user) {
+      result = { ok: false, error: "unauthorized" };
+      return state;
+    }
+
+    if (!room) {
+      result = { ok: false, error: "room_not_found" };
+      return state;
+    }
+
+    const isMember = (state.roomMemberships || []).some(
+      (membership) => membership.roomId === room.id && membership.userId === user.id
+    );
+
+    if (!isMember) {
+      result = { ok: false, error: "forbidden" };
+      return state;
+    }
+
+    let code = buildInviteCode();
+
+    while (state.inviteCodes.some((invite) => invite.code === code)) {
+      code = buildInviteCode();
+    }
+
+    state.inviteCodes.push({
+      code,
+      roomId: room.id,
+      createdByUserId: user.id,
+      maxUses: 1,
+      usedCount: 0,
+      status: "active",
+      createdAt: Date.now()
+    });
+
+    result = {
+      ok: true,
+      invite: {
+        code,
+        roomId: room.id,
+        path: `/invite/${code}`
+      }
+    };
+
+    return state;
+  });
+
+  return result;
+}
+
+export async function getRoomInvitePreview(code) {
+  const state = readState();
+  const invite = state.inviteCodes.find((entry) => entry.code === code && isRoomInviteActive(entry));
+
+  if (!invite) {
+    return { ok: false, error: "invite_not_found" };
+  }
+
+  const room = findRoomRecord(state, invite.roomId);
+
+  if (!room) {
+    return { ok: false, error: "room_not_found" };
+  }
+
+  const createdBy = state.users.find((user) => user.id === invite.createdByUserId) || null;
+
+  return {
+    ok: true,
+    invite: {
+      code: invite.code,
+      roomId: room.id,
+      roomName: room.name,
+      roomTopic: room.topic,
+      createdBy: createdBy
+        ? {
+            id: createdBy.id,
+            name: createdBy.name
+          }
+        : null
+    }
+  };
+}
+
+export async function acceptRoomInvite({ token, code }) {
+  let result = { ok: false, error: "internal_error" };
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const invite = state.inviteCodes.find((entry) => entry.code === code && entry.roomId);
+
+    if (!user) {
+      result = { ok: false, error: "unauthorized" };
+      return state;
+    }
+
+    if (!invite) {
+      result = { ok: false, error: "invite_not_found" };
+      return state;
+    }
+
+    const room = findRoomRecord(state, invite.roomId);
+
+    if (!room) {
+      result = { ok: false, error: "room_not_found" };
+      return state;
+    }
+
+    const alreadyMember = (state.roomMemberships || []).some(
+      (membership) => membership.roomId === room.id && membership.userId === user.id
+    );
+
+    if (alreadyMember) {
+      result = {
+        ok: true,
+        room: mapRoomSummary(state, room),
+        joined: false
+      };
+      return state;
+    }
+
+    if (!isRoomInviteActive(invite)) {
+      result = { ok: false, error: "invite_not_found" };
+      return state;
+    }
+
+    state.roomMemberships = state.roomMemberships || [];
+    state.roomMemberships.push({
+      roomId: room.id,
+      userId: user.id,
+      role: "member",
+      joinedAt: Date.now()
+    });
+
+    invite.usedCount = Number(invite.usedCount || 0) + 1;
+
+    if (invite.usedCount >= Number(invite.maxUses || 1)) {
+      invite.status = "exhausted";
+    }
+
+    result = {
+      ok: true,
+      room: mapRoomSummary(state, room),
+      joined: true
+    };
+
+    return state;
+  });
+
+  return result;
 }
 
 export async function registerUser({
