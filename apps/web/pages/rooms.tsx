@@ -84,7 +84,7 @@ export default function Rooms() {
               <div className="page-intro-bar">
                 <div>
                   <h1>Комнаты</h1>
-                  <p>Выбери комнату и продолжи разговор.</p>
+                  <p>Здесь можно открыть существующую комнату или создать новую для своего разговора.</p>
                 </div>
                 <a className="button" href="/rooms/create">
                   Создать комнату
@@ -108,7 +108,7 @@ export default function Rooms() {
               ) : roomsState === 'empty' ? (
                 <section className="status-card">
                   <h1>Пока нет комнат</h1>
-                  <p>Создай первую комнату и начни общение.</p>
+                  <p>Начни с простой комнаты для первого разговора. После создания ты сразу попадешь внутрь и сможешь написать сообщение.</p>
                   <div className="status-actions">
                     <a className="button" href="/rooms/create">
                       Создать комнату
@@ -116,17 +116,24 @@ export default function Rooms() {
                   </div>
                 </section>
               ) : roomsState === 'ready' ? (
-                <div className="grid">
-                  {rooms.map((room) => (
-                    <a key={room.id} href={`/room/${room.id}`} className="room-card">
-                      <h3>{room.name}</h3>
-                      <p>{room.topic}</p>
-                      <div className="members">
-                        <span>{room.members}</span> участников
-                      </div>
-                    </a>
-                  ))}
-                </div>
+                <>
+                  <section className="guidance-card">
+                    <h2>{user?.name ? `${user.name}, начни с удобного шага` : 'Начни с удобного шага'}</h2>
+                    <p>Можно сразу открыть существующую комнату из списка ниже или создать свою, если хочешь начать новый разговор.</p>
+                  </section>
+
+                  <div className="grid">
+                    {rooms.map((room) => (
+                      <a key={room.id} href={`/room/${room.id}`} className="room-card">
+                        <h3>{room.name}</h3>
+                        <p>{room.topic}</p>
+                        <div className="members">
+                          <span>{room.members}</span> участников
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </>
               ) : null}
             </section>
           </>
