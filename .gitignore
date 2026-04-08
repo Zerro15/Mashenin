@@ -5,8 +5,11 @@ node_modules/
 dist/
 build/
 .next/
+.next_backup/
 coverage/
 *.log
+*.tsbuildinfo
+.codex
 
 apps/web/node_modules/
 apps/api/node_modules/
