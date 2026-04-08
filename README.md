@@ -50,6 +50,28 @@ Voice-first messenger для постоянных комнат, команд и 
 - LiveKit-compatible room token minting endpoint
 - pluggable data provider layer with `file` and `sql` modes
 
+## MVP Smoke
+
+Минимальный smoke-тест для основного MVP-контура сейчас живет в `apps/api`.
+
+Что он проверяет:
+
+- `login -> open room -> load message history -> send message -> logout`
+- базовый контракт `auth/me` после входа и после logout
+
+Как запускать:
+
+```bash
+cd apps/api
+npm run test:smoke
+```
+
+Когда запускать:
+
+- после правок в `apps/api`, которые затрагивают auth, rooms, messages или logout;
+- перед отдельным commit для MVP-контура;
+- перед merge изменений, которые могут сломать основной пользовательский путь.
+
 ## Database Foundation
 
 - Postgres schema bootstrap in `infra/postgres/init.sql`
