@@ -356,6 +356,19 @@
   color: #64748b;
 }
 
+.empty-conversation-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.35rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #2563eb;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
 .message-topline {
   display: flex;
   align-items: baseline;
@@ -394,6 +407,11 @@
   border-radius: 1rem;
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.composer-shell-first-message {
+  border-color: #bfdbfe;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .composer-shell .text-area {

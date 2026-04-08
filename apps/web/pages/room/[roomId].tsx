@@ -258,6 +258,7 @@ export default function RoomPage() {
                   <div className="empty-conversation-state">
                     <h2>Пока здесь тихо</h2>
                     <p>Напиши первое сообщение, чтобы начать разговор в этой комнате.</p>
+                    <div className="empty-conversation-cta">Поле для сообщения находится сразу ниже.</div>
                   </div>
                 ) : (
                   messages.map((message) => (
@@ -275,7 +276,7 @@ export default function RoomPage() {
               </div>
 
               <form className="composer-form" onSubmit={handleSubmit}>
-                <div className="composer-shell">
+                <div className={`composer-shell${messages.length === 0 ? ' composer-shell-first-message' : ''}`}>
                   <textarea
                     className="text-area"
                     value={draft}
