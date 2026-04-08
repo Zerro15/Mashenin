@@ -6,7 +6,7 @@ function uniqueEmail() {
   return `smoke.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
 
-test('MVP smoke: login -> open room -> load message history -> send message -> logout', async () => {
+test('MVP smoke: login -> create room -> open room -> load message history -> send message -> logout', async () => {
   process.env.DATA_PROVIDER = 'file';
 
   const app = await buildServer();
@@ -57,6 +57,34 @@ test('MVP smoke: login -> open room -> load message history -> send message -> l
     assert.equal(meResponse.statusCode, 200);
     assert.equal(meResponse.json().user.email, email);
 
+    const roomName = `Smoke Room ${Date.now()}`;
+    const roomTopic = 'Smoke topic for create room';
+
+    const createRoomResponse = await app.inject({
+      method: 'POST',
+      url: '/api/rooms',
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      payload: {
+        name: roomName,
+        topic: roomTopic
+      }
+    });
+
+    assert.equal(createRoomResponse.statusCode, 200);
+
+    const createRoomBody = createRoomResponse.json();
+    assert.equal(createRoomBody.ok, true);
+    assert.equal(typeof createRoomBody.room.id, 'string');
+    assert.ok(createRoomBody.room.id.length > 0);
+    assert.equal(createRoomBody.room.name, roomName);
+    assert.equal(createRoomBody.room.kind, 'persistent');
+    assert.equal(createRoomBody.room.topic, roomTopic);
+    assert.equal(typeof createRoomBody.room.members, 'number');
+
+    const roomId = createRoomBody.room.id;
+
     const roomsResponse = await app.inject({
       method: 'GET',
       url: '/api/rooms',
@@ -71,8 +99,16 @@ test('MVP smoke: login -> open room -> load message history -> send message -> l
     assert.equal(roomsBody.ok, true);
     assert.ok(Array.isArray(roomsBody.rooms));
     assert.ok(roomsBody.rooms.length > 0);
-
-    const roomId = roomsBody.rooms[0].id;
+    assert.ok(
+      roomsBody.rooms.some(
+        (room) =>
+          room.id === roomId &&
+          room.name === roomName &&
+          room.kind === 'persistent' &&
+          room.topic === roomTopic &&
+          typeof room.members === 'number'
+      )
+    );
 
     const roomResponse = await app.inject({
       method: 'GET',
@@ -87,6 +123,10 @@ test('MVP smoke: login -> open room -> load message history -> send message -> l
     const roomBody = roomResponse.json();
     assert.equal(roomBody.ok, true);
     assert.equal(roomBody.room.id, roomId);
+    assert.equal(roomBody.room.name, roomName);
+    assert.equal(roomBody.room.kind, 'persistent');
+    assert.equal(roomBody.room.topic, roomTopic);
+    assert.equal(typeof roomBody.room.members, 'number');
 
     const messagesResponse = await app.inject({
       method: 'GET',
