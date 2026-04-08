@@ -131,6 +131,16 @@ function getSessionRecord(token) {
   return state.sessions.find((session) => session.token === token) || null;
 }
 
+function slugifyRoomName(value) {
+  const normalized = String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+
+  return normalized || `room-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function buildSessionPayload(user, ttlSeconds, state) {
   const session = buildSessionRecord(user.id, ttlSeconds);
   state.sessions = state.sessions.filter((entry) => entry.userId !== user.id);
@@ -310,6 +320,61 @@ export async function createRoomAccess({ token, roomId, ttlSeconds = 3600 }) {
     roomName: room.id,
     ttlSeconds
   };
+}
+
+export async function createRoom({ token, name, topic = '' }) {
+  const normalizedName = String(name || '').trim();
+  const normalizedTopic = String(topic || '').trim();
+
+  if (!token || !normalizedName) {
+    return null;
+  }
+
+  let createdRoom = null;
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+
+    if (!user) {
+      return state;
+    }
+
+    const slugBase = slugifyRoomName(normalizedName);
+    const hasSameSlug = state.rooms.some((room) => room.id === slugBase || room.slug === slugBase);
+    const roomId = hasSameSlug ? `${slugBase}-${Math.random().toString(36).slice(2, 6)}` : slugBase;
+
+    const room = {
+      id: roomId,
+      slug: roomId,
+      name: normalizedName,
+      kind: 'persistent',
+      topic: normalizedTopic || 'новая комната',
+      members: 0
+    };
+
+    state.rooms.push(room);
+    state.roomMemberships = state.roomMemberships || [];
+    state.roomMemberships.push({
+      roomId,
+      userId: user.id,
+      role: 'owner',
+      joinedAt: Date.now()
+    });
+
+    createdRoom = {
+      id: room.id,
+      name: room.name,
+      kind: room.kind,
+      topic: room.topic,
+      members: room.members,
+      speakers: []
+    };
+
+    return state;
+  });
+
+  return createdRoom;
 }
 
 export async function registerUser({

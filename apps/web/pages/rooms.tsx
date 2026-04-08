@@ -68,8 +68,15 @@ export default function Rooms() {
         ) : (
           <>
             <section className="page-intro">
-              <h1>Комнаты</h1>
-              <p>Выбери комнату и открой текстовый поток.</p>
+              <div className="page-intro-bar">
+                <div>
+                  <h1>Комнаты</h1>
+                  <p>Выбери комнату и открой текстовый поток.</p>
+                </div>
+                <a className="button" href="/rooms/create">
+                  Новая комната
+                </a>
+              </div>
             </section>
 
             <section className="room-list">

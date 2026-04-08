@@ -23,6 +23,41 @@ export default async function roomRoutes(fastify) {
     }
   });
 
+  // Создать новую комнату
+  fastify.post('/', async (request, reply) => {
+    const token = getSessionToken(request);
+    const name = String(request.body?.name || '').trim();
+    const topic = String(request.body?.topic || '').trim();
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    if (!name) {
+      return reply.status(400).send({ ok: false, error: 'room_name_required' });
+    }
+
+    try {
+      const room = await fastify.store.createRoom({
+        token,
+        name,
+        topic
+      });
+
+      if (!room) {
+        return reply.status(400).send({ ok: false, error: 'room_create_failed' });
+      }
+
+      return {
+        ok: true,
+        room
+      };
+    } catch (error) {
+      fastify.log.error('Error creating room:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
   // Получить информацию о комнате
   fastify.get('/:roomId', async (request, reply) => {
     const { roomId } = request.params;

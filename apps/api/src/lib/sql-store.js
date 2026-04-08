@@ -19,6 +19,16 @@ function slugifyDisplayName(value) {
   return normalized || `user-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function slugifyRoomName(value) {
+  const normalized = String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+
+  return normalized || `room-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function mapUser(row) {
   return {
     id: row.id,
@@ -833,6 +843,80 @@ export async function createMessage({ token, roomId, body }) {
     sentAt: row.created_at,
     text: row.body
   };
+}
+
+export async function createRoom({ token, name, topic = '' }) {
+  const normalizedName = String(name || '').trim();
+  const normalizedTopic = String(topic || '').trim();
+
+  if (!token || !normalizedName) {
+    return null;
+  }
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const user = await getUserBySessionToken(client, token);
+
+    if (!user) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const slugBase = slugifyRoomName(normalizedName);
+    const existingRoom = await client.query(
+      `
+        SELECT slug
+        FROM rooms
+        WHERE slug = $1
+        LIMIT 1
+      `,
+      [slugBase]
+    );
+
+    const slug = existingRoom.rows[0]
+      ? `${slugBase}-${Math.random().toString(36).slice(2, 6)}`
+      : slugBase;
+
+    const roomResult = await client.query(
+      `
+        INSERT INTO rooms (slug, name, kind, topic, created_by_user_id)
+        VALUES ($1, $2, 'persistent', $3, $4)
+        RETURNING id, slug, name, kind, topic, created_at
+      `,
+      [slug, normalizedName, normalizedTopic || 'новая комната', user.id]
+    );
+
+    const room = roomResult.rows[0];
+
+    await client.query(
+      `
+        INSERT INTO room_memberships (room_id, user_id, role)
+        VALUES ($1, $2, 'owner')
+        ON CONFLICT (room_id, user_id) DO NOTHING
+      `,
+      [room.id, user.id]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      id: room.slug,
+      name: room.name,
+      kind: room.kind,
+      topic: room.topic,
+      members: 0,
+      speakers: []
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function createEvent({ token, title, startsAt, roomId = null }) {

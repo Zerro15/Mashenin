@@ -83,6 +83,10 @@ export async function createMessage(...args) {
   return impl().createMessage(...args);
 }
 
+export async function createRoom(...args) {
+  return impl().createRoom?.(...args) || null;
+}
+
 export async function createEvent(...args) {
   return impl().createEvent(...args);
 }
