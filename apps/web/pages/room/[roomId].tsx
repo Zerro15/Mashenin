@@ -21,6 +21,8 @@ interface Room {
 
 type RoomLoadState = 'idle' | 'loading' | 'ready' | 'not_found' | 'error';
 type MessagesLoadState = 'idle' | 'loading' | 'ready' | 'error';
+type InviteCreateState = 'idle' | 'loading' | 'ready' | 'error';
+type InviteCopyState = 'idle' | 'success' | 'error';
 
 const apiClient = createApiClient();
 
@@ -54,6 +56,10 @@ export default function RoomPage() {
   const [roomError, setRoomError] = useState('');
   const [messagesError, setMessagesError] = useState('');
   const [sendError, setSendError] = useState('');
+  const [inviteCreateState, setInviteCreateState] = useState<InviteCreateState>('idle');
+  const [inviteLink, setInviteLink] = useState('');
+  const [inviteError, setInviteError] = useState('');
+  const [inviteCopyState, setInviteCopyState] = useState<InviteCopyState>('idle');
   const [roomReloadKey, setRoomReloadKey] = useState(0);
   const [messagesReloadKey, setMessagesReloadKey] = useState(0);
 
@@ -69,6 +75,10 @@ export default function RoomPage() {
       setRoomError('');
       setMessagesError('');
       setSendError('');
+      setInviteCreateState('idle');
+      setInviteLink('');
+      setInviteError('');
+      setInviteCopyState('idle');
       setRoom(null);
       setMessages([]);
       setMessagesState('idle');
@@ -156,6 +166,64 @@ export default function RoomPage() {
       isActive = false;
     };
   }, [isChecking, messagesReloadKey, room, user]);
+
+  async function handleCreateInvite() {
+    if (!roomId || inviteCreateState === 'loading' || inviteLink) {
+      return;
+    }
+
+    setInviteCreateState('loading');
+    setInviteError('');
+    setInviteCopyState('idle');
+
+    try {
+      const response = await apiClient.post(`/api/rooms/${roomId}/invites`);
+      const nextPath = response.data?.invite?.path;
+
+      if (!response.data?.ok || typeof nextPath !== 'string' || !nextPath.startsWith('/')) {
+        setInviteCreateState('error');
+        setInviteError('Не удалось подготовить ссылку для приглашения.');
+        return;
+      }
+
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      setInviteLink(origin ? `${origin}${nextPath}` : nextPath);
+      setInviteCreateState('ready');
+    } catch {
+      setInviteCreateState('error');
+      setInviteError('Не удалось подготовить ссылку для приглашения.');
+    }
+  }
+
+  async function handleCopyInviteLink() {
+    if (!inviteLink) {
+      return;
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(inviteLink);
+      } else if (typeof document !== 'undefined') {
+        const input = document.createElement('input');
+        input.value = inviteLink;
+        document.body.appendChild(input);
+        input.select();
+        input.setSelectionRange(0, inviteLink.length);
+        const copied = document.execCommand('copy');
+        document.body.removeChild(input);
+
+        if (!copied) {
+          throw new Error('copy_failed');
+        }
+      } else {
+        throw new Error('clipboard_unavailable');
+      }
+
+      setInviteCopyState('success');
+    } catch {
+      setInviteCopyState('error');
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -257,7 +325,55 @@ export default function RoomPage() {
                 ) : messages.length === 0 ? (
                   <div className="empty-conversation-state">
                     <h2>Пока здесь тихо</h2>
-                    <p>Напиши первое сообщение, чтобы начать разговор в этой комнате.</p>
+                    <p>Напиши первое сообщение или пригласи человека, чтобы разговор в этой комнате наконец начался.</p>
+                    <div className="empty-conversation-invite">
+                      <div className="empty-conversation-invite-copy">
+                        <h3>Пригласи первого человека</h3>
+                        <p>Подготовь ссылку на эту комнату и отправь ее тому, с кем хочешь начать разговор.</p>
+                      </div>
+
+                      {inviteCreateState === 'ready' && inviteLink ? (
+                        <div className="invite-inline-state invite-inline-state-success">
+                          <p>Ссылка готова. Ее можно отправить прямо сейчас.</p>
+                          <div className="invite-inline-link">
+                            <input className="text-input invite-link-input" type="text" value={inviteLink} readOnly />
+                            <button className="button button-secondary" type="button" onClick={handleCopyInviteLink}>
+                              Скопировать ссылку
+                            </button>
+                          </div>
+                          {inviteCopyState === 'success' ? (
+                            <div className="empty-conversation-cta">Ссылка скопирована.</div>
+                          ) : inviteCopyState === 'error' ? (
+                            <p className="invite-inline-note">Не удалось скопировать автоматически. Скопируй ссылку вручную из поля выше.</p>
+                          ) : (
+                            <p className="invite-inline-note">Когда человек откроет ссылку, он сможет войти и сразу попасть в эту комнату.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="invite-inline-state">
+                          <div className="invite-inline-actions">
+                            <button
+                              className="button"
+                              type="button"
+                              onClick={handleCreateInvite}
+                              disabled={inviteCreateState === 'loading'}
+                            >
+                              {inviteCreateState === 'loading' ? 'Готовлю ссылку...' : 'Пригласить человека'}
+                            </button>
+                            {inviteCreateState === 'error' ? (
+                              <button className="button button-secondary" type="button" onClick={handleCreateInvite}>
+                                Повторить
+                              </button>
+                            ) : null}
+                          </div>
+                          {inviteCreateState === 'error' ? (
+                            <p className="form-error">{inviteError}</p>
+                          ) : (
+                            <p className="invite-inline-note">Это самый простой следующий шаг, если комната пока пустая.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <div className="empty-conversation-cta">Поле для сообщения находится сразу ниже.</div>
                   </div>
                 ) : (

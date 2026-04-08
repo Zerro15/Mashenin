@@ -401,6 +401,76 @@
   color: #64748b;
 }
 
+.empty-conversation-invite {
+  width: min(100%, 560px);
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 0.9rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.empty-conversation-invite-copy {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+.empty-conversation-invite-copy h3,
+.empty-conversation-invite-copy p {
+  margin: 0;
+}
+
+.empty-conversation-invite-copy h3 {
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.invite-inline-state {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.invite-inline-state-success {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.invite-inline-state p {
+  margin: 0;
+}
+
+.invite-inline-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.invite-inline-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.invite-link-input {
+  flex: 1 1 320px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.invite-inline-note {
+  color: #64748b;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
 .empty-conversation-cta {
   display: inline-flex;
   align-items: center;
@@ -490,6 +560,7 @@
 @media (max-width: 720px) {
   .page-intro-bar,
   .inline-state,
+  .invite-inline-link,
   .composer-actions,
   .status-actions,
   .form-actions {
