@@ -218,52 +218,46 @@
 
 .room-shell {
   display: grid;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
-.room-meta-card,
 .room-chat-card {
   padding: 1.5rem;
 }
 
-.room-meta-card h1 {
-  margin: 0 0 0.5rem;
-}
-
-.room-meta-card p {
-  margin: 0 0 1rem;
-  color: #64748b;
-}
-
-.room-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
-  font-size: 0.9rem;
-  color: #475569;
-}
-
 .chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
+  display: grid;
+  gap: 0.5rem;
   margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.chat-header h2 {
+.conversation-header h1 {
   margin: 0;
 }
 
-.chat-header a {
+.conversation-kicker a {
   color: #2563eb;
   text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.conversation-topic {
+  margin: 0;
+  color: #64748b;
+}
+
+.conversation-meta {
+  font-size: 0.9rem;
+  color: #475569;
 }
 
 .message-list {
   display: grid;
   gap: 0.75rem;
   margin-bottom: 1rem;
+  min-height: 240px;
 }
 
 .message-item {
@@ -291,6 +285,27 @@
 .inline-state-error {
   border-color: #fecaca;
   background: #fef2f2;
+}
+
+.empty-conversation-state {
+  display: grid;
+  place-items: center;
+  gap: 0.5rem;
+  min-height: 240px;
+  padding: 2rem 1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.empty-conversation-state h2,
+.empty-conversation-state p {
+  margin: 0;
+}
+
+.empty-conversation-state p {
+  color: #64748b;
 }
 
 .message-item p {

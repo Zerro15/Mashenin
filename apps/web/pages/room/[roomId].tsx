@@ -28,6 +28,18 @@ function formatTimestamp(value: string) {
   return new Date(value).toLocaleString('ru-RU');
 }
 
+function formatMembersLabel(count: number) {
+  if (count === 1) {
+    return '1 участник';
+  }
+
+  if (count >= 2 && count <= 4) {
+    return `${count} участника`;
+  }
+
+  return `${count} участников`;
+}
+
 export default function RoomPage() {
   const router = useRouter();
   const roomId = typeof router.query.roomId === 'string' ? router.query.roomId : '';
@@ -188,7 +200,7 @@ export default function RoomPage() {
         {isChecking ? (
           <p className="empty">Проверка сессии...</p>
         ) : roomState === 'loading' ? (
-          <p className="empty">Загрузка комнаты...</p>
+          <p className="empty">Открываю разговор...</p>
         ) : roomState === 'not_found' ? (
           <section className="status-card">
             <h1>Комната не найдена</h1>
@@ -201,7 +213,7 @@ export default function RoomPage() {
           </section>
         ) : roomState === 'error' ? (
           <section className="status-card">
-            <h1>Не удалось открыть комнату</h1>
+            <h1>Не удалось открыть разговор</h1>
             <p>{roomError || 'Попробуй повторить загрузку еще раз.'}</p>
             <div className="status-actions">
               <button className="button" type="button" onClick={() => setRoomReloadKey((value) => value + 1)}>
@@ -214,25 +226,23 @@ export default function RoomPage() {
           </section>
         ) : room ? (
           <section className="room-shell">
-            <div className="room-meta-card">
-              <h1>{room.name}</h1>
-              <p>{room.topic}</p>
-              <div className="room-facts">
-                <span>id: {room.id}</span>
-                <span>тип: {room.kind}</span>
-                <span>в комнате: {room.members}</span>
-              </div>
-            </div>
-
             <div className="room-chat-card">
               <div className="chat-header">
-                <h2>Сообщения</h2>
-                <a href="/rooms">Назад к комнатам</a>
+                <div className="conversation-header">
+                  <div className="conversation-kicker">
+                    <a href="/rooms">Все комнаты</a>
+                  </div>
+                  <h1>{room.name}</h1>
+                  <p className="conversation-topic">
+                    {room.topic || 'Открой этот разговор и продолжи общение.'}
+                  </p>
+                  <div className="conversation-meta">{formatMembersLabel(room.members)}</div>
+                </div>
               </div>
 
               <div className="message-list">
                 {messagesState === 'loading' ? (
-                  <p className="empty">Загрузка истории сообщений...</p>
+                  <p className="empty">Загружаю сообщения...</p>
                 ) : messagesState === 'error' ? (
                   <div className="inline-state inline-state-error">
                     <p>{messagesError}</p>
@@ -245,7 +255,10 @@ export default function RoomPage() {
                     </button>
                   </div>
                 ) : messages.length === 0 ? (
-                  <p className="empty">Сообщений пока нет.</p>
+                  <div className="empty-conversation-state">
+                    <h2>Пока здесь тихо</h2>
+                    <p>Напиши первое сообщение, чтобы начать разговор в этой комнате.</p>
+                  </div>
                 ) : (
                   messages.map((message) => (
                     <article key={message.id} className="message-item">
@@ -264,13 +277,13 @@ export default function RoomPage() {
                   className="text-area"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
-                  placeholder={`Сообщение в #${room.id}`}
-                  rows={4}
+                  placeholder={`Напиши сообщение в ${room.name}`}
+                  rows={3}
                 />
 
                 <div className="composer-actions">
                   {sendError ? <p className="form-error">{sendError}</p> : <span />}
-                  <button className="button" type="submit" disabled={isSending}>
+                  <button className="button" type="submit" disabled={isSending || !draft.trim()}>
                     {isSending ? 'Отправка...' : 'Отправить'}
                   </button>
                 </div>
