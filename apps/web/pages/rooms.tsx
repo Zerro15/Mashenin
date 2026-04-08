@@ -11,13 +11,16 @@ interface Room {
   members: number;
 }
 
+type RoomsLoadState = 'loading' | 'ready' | 'empty' | 'error';
+
 const apiClient = createApiClient();
 
 export default function Rooms() {
   const { user, isChecking, logout } = useAuthRoute('protected');
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [roomsState, setRoomsState] = useState<RoomsLoadState>('loading');
+  const [roomsError, setRoomsError] = useState('');
+  const [roomsReloadKey, setRoomsReloadKey] = useState(0);
 
   useEffect(() => {
     if (isChecking || !user) {
@@ -27,6 +30,10 @@ export default function Rooms() {
     let isActive = true;
 
     async function loadRooms() {
+      setRoomsState('loading');
+      setRooms([]);
+      setRoomsError('');
+
       try {
         const response = await apiClient.get('/api/rooms');
 
@@ -34,8 +41,17 @@ export default function Rooms() {
           return;
         }
 
-        setRooms(response.data?.ok ? response.data.rooms || [] : []);
-        setError('');
+        if (!response.data?.ok || !Array.isArray(response.data.rooms)) {
+          setRooms([]);
+          setRoomsState('error');
+          setRoomsError('Не удалось загрузить список комнат.');
+          return;
+        }
+
+        const nextRooms = response.data.rooms;
+
+        setRooms(nextRooms);
+        setRoomsState(nextRooms.length === 0 ? 'empty' : 'ready');
       } catch (loadError) {
         if (!isActive) {
           return;
@@ -43,11 +59,8 @@ export default function Rooms() {
 
         console.error('Failed to fetch rooms:', loadError);
         setRooms([]);
-        setError('Не удалось загрузить комнаты.');
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
+        setRoomsState('error');
+        setRoomsError('Не удалось загрузить список комнат.');
       }
     }
 
@@ -56,7 +69,7 @@ export default function Rooms() {
     return () => {
       isActive = false;
     };
-  }, [isChecking, user]);
+  }, [isChecking, roomsReloadKey, user]);
 
   return (
     <div className="container">
@@ -80,13 +93,29 @@ export default function Rooms() {
             </section>
 
             <section className="room-list">
-              {isLoading ? (
+              {roomsState === 'loading' ? (
                 <p className="empty">Загрузка комнат...</p>
-              ) : error ? (
-                <p className="empty">{error}</p>
-              ) : rooms.length === 0 ? (
-                <p className="empty">Пока нет комнат.</p>
-              ) : (
+              ) : roomsState === 'error' ? (
+                <section className="status-card">
+                  <h1>Не удалось загрузить комнаты</h1>
+                  <p>{roomsError || 'Попробуй повторить загрузку списка еще раз.'}</p>
+                  <div className="status-actions">
+                    <button className="button" type="button" onClick={() => setRoomsReloadKey((value) => value + 1)}>
+                      Повторить загрузку
+                    </button>
+                  </div>
+                </section>
+              ) : roomsState === 'empty' ? (
+                <section className="status-card">
+                  <h1>Пока нет комнат</h1>
+                  <p>Создай первую комнату и открой текстовый поток.</p>
+                  <div className="status-actions">
+                    <a className="button" href="/rooms/create">
+                      Создать комнату
+                    </a>
+                  </div>
+                </section>
+              ) : roomsState === 'ready' ? (
                 <div className="grid">
                   {rooms.map((room) => (
                     <a key={room.id} href={`/room/${room.id}`} className="room-card">
@@ -98,7 +127,7 @@ export default function Rooms() {
                     </a>
                   ))}
                 </div>
-              )}
+              ) : null}
             </section>
           </>
         )}
