@@ -39,6 +39,7 @@
 
 - Invite-based onboarding в продуктово завершенном виде.
 - Presence в комнатах и базовый online-state.
+- Отдельный slice `create hub / create room shell`; текущий незавершенный экран `/create` не входит в MVP.
 - Список участников комнаты.
 - События и RSVP.
 - Голосовой сценарий и интеграция с LiveKit.
