@@ -1,6 +1,33 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const SESSION_KEY = 'mashenin_session';
+
+export function getSessionToken() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  return localStorage.getItem(SESSION_KEY) || '';
+}
+
+export function setSessionToken(token: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  localStorage.setItem(SESSION_KEY, token);
+  document.cookie = `${SESSION_KEY}=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
+}
+
+export function clearSessionToken() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  localStorage.removeItem(SESSION_KEY);
+  document.cookie = `${SESSION_KEY}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
 
 export function createApiClient(baseURL?: string) {
   const instance = axios.create({
@@ -15,7 +42,7 @@ export function createApiClient(baseURL?: string) {
   instance.interceptors.request.use(
     (config) => {
       if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('mashenin_session');
+        const token = getSessionToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }

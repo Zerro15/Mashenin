@@ -54,7 +54,7 @@ export default function Rooms() {
 
   return (
     <div className="container">
-      <Header />
+      <Header requireAuth />
 
       <main className="main">
         <section className="page-intro">

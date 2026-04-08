@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../../components/layout/Header';
-import { createApiClient } from '../../lib/api';
+import { createApiClient, getSessionToken } from '../../lib/api';
 
 interface RoomMessage {
   id: string;
@@ -40,7 +40,7 @@ export default function RoomPage() {
       return;
     }
 
-    if (typeof window !== 'undefined' && !localStorage.getItem('mashenin_session')) {
+    if (typeof window !== 'undefined' && !getSessionToken()) {
       router.replace('/login');
       return;
     }
@@ -127,7 +127,7 @@ export default function RoomPage() {
 
   return (
     <div className="container">
-      <Header />
+      <Header requireAuth />
 
       <main className="main">
         {isLoading ? (

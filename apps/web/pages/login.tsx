@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../components/layout/Header';
-import { createApiClient } from '../lib/api';
+import { clearSessionToken, createApiClient, getSessionToken, setSessionToken } from '../lib/api';
 
 const apiClient = createApiClient();
 
@@ -17,9 +17,40 @@ export default function LoginPage() {
       return;
     }
 
-    if (localStorage.getItem('mashenin_session')) {
-      router.replace('/rooms');
+    const token = getSessionToken();
+
+    if (!token) {
+      return;
     }
+
+    let isActive = true;
+
+    async function validateSession() {
+      try {
+        const response = await apiClient.get('/api/auth/me');
+
+        if (!isActive) {
+          return;
+        }
+
+        if (response.data?.ok && response.data?.user) {
+          router.replace('/rooms');
+          return;
+        }
+
+        clearSessionToken();
+      } catch {
+        if (isActive) {
+          clearSessionToken();
+        }
+      }
+    }
+
+    validateSession();
+
+    return () => {
+      isActive = false;
+    };
   }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -38,8 +69,7 @@ export default function LoginPage() {
         return;
       }
 
-      localStorage.setItem('mashenin_session', response.data.token);
-      document.cookie = `mashenin_session=${encodeURIComponent(response.data.token)}; Path=/; SameSite=Lax`;
+      setSessionToken(response.data.token);
       router.push('/rooms');
     } catch (submitError: any) {
       const nextError =
