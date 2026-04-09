@@ -81,6 +81,7 @@ export default function RoomPage() {
   const [messagesSyncState, setMessagesSyncState] = useState<MessagesSyncState>('idle');
   const [roomReloadKey, setRoomReloadKey] = useState(0);
   const [messagesReloadKey, setMessagesReloadKey] = useState(0);
+  const hasJoinedCompanion = Boolean(room && room.members > 1 && messages.length === 0);
 
   useEffect(() => {
     if (!roomId || isChecking || !user) {
@@ -186,17 +187,17 @@ export default function RoomPage() {
     return () => {
       isActive = false;
     };
-  }, [isChecking, messagesReloadKey, room, user]);
+  }, [isChecking, messagesReloadKey, room?.id, user]);
 
   useEffect(() => {
-    if (!room || isChecking || !user || messagesState !== 'ready') {
+    if (!room?.id || isChecking || !user || messagesState !== 'ready') {
       return;
     }
 
     let isActive = true;
     let isRefreshing = false;
 
-    async function refreshMessages() {
+    async function refreshRoomActivity() {
       if (isRefreshing) {
         return;
       }
@@ -209,17 +210,41 @@ export default function RoomPage() {
       setMessagesSyncState('syncing');
 
       try {
-        const messagesResponse = await apiClient.get(`/api/rooms/${room.id}/messages`);
+        const [roomResponse, messagesResponse] = await Promise.all([
+          apiClient.get(`/api/rooms/${room.id}`),
+          apiClient.get(`/api/rooms/${room.id}/messages`)
+        ]);
 
         if (!isActive) {
           return;
+        }
+
+        if (roomResponse.data?.ok && roomResponse.data.room) {
+          const nextRoom = roomResponse.data.room;
+
+          setRoom((currentRoom) => {
+            if (!currentRoom || currentRoom.id !== nextRoom.id) {
+              return currentRoom;
+            }
+
+            if (
+              currentRoom.name === nextRoom.name &&
+              currentRoom.topic === nextRoom.topic &&
+              currentRoom.kind === nextRoom.kind &&
+              currentRoom.members === nextRoom.members
+            ) {
+              return currentRoom;
+            }
+
+            return nextRoom;
+          });
         }
 
         const nextMessages = messagesResponse.data?.ok ? messagesResponse.data.messages || [] : [];
         setMessages((currentMessages) => mergeMessages(currentMessages, nextMessages));
       } catch (loadError) {
         if (isActive) {
-          console.error('Failed to refresh messages:', loadError);
+          console.error('Failed to refresh room activity:', loadError);
         }
       } finally {
         if (isActive) {
@@ -230,13 +255,13 @@ export default function RoomPage() {
       }
     }
 
-    const intervalId = window.setInterval(refreshMessages, ROOM_MESSAGES_POLL_INTERVAL_MS);
+    const intervalId = window.setInterval(refreshRoomActivity, ROOM_MESSAGES_POLL_INTERVAL_MS);
 
     return () => {
       isActive = false;
       window.clearInterval(intervalId);
     };
-  }, [isChecking, messagesState, room, user]);
+  }, [isChecking, messagesState, room?.id, user]);
 
   async function handleCreateInvite() {
     if (!roomId || inviteCreateState === 'loading' || inviteLink) {
@@ -397,10 +422,20 @@ export default function RoomPage() {
                   <div className="empty-conversation-state">
                     <h2>Пока здесь тихо</h2>
                     <p>Напиши первое сообщение или пригласи человека, чтобы разговор в этой комнате наконец начался.</p>
+                    {hasJoinedCompanion ? (
+                      <div className="room-social-signal">
+                        <strong>Кто-то уже вошел в комнату.</strong>
+                        <span>Ты уже не один в разговоре. Можно написать первое сообщение.</span>
+                      </div>
+                    ) : null}
                     <div className="empty-conversation-invite">
                       <div className="empty-conversation-invite-copy">
-                        <h3>Пригласи первого человека</h3>
-                        <p>Подготовь ссылку на эту комнату и отправь ее тому, с кем хочешь начать разговор.</p>
+                        <h3>{hasJoinedCompanion ? 'Человек уже в комнате' : 'Пригласи первого человека'}</h3>
+                        <p>
+                          {hasJoinedCompanion
+                            ? 'Собеседник уже может открыть разговор. Теперь самый естественный следующий шаг — написать первое сообщение.'
+                            : 'Подготовь ссылку на эту комнату и отправь ее тому, с кем хочешь начать разговор.'}
+                        </p>
                       </div>
 
                       {inviteCreateState === 'ready' && inviteLink ? (

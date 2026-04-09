@@ -401,6 +401,29 @@
   color: #64748b;
 }
 
+.room-social-signal {
+  display: grid;
+  gap: 0.3rem;
+  width: min(100%, 560px);
+  margin-top: 0.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.85rem;
+  background: #f8fbff;
+  text-align: left;
+}
+
+.room-social-signal strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.room-social-signal span {
+  color: #475569;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
 .empty-conversation-invite {
   width: min(100%, 560px);
   margin-top: 0.75rem;
