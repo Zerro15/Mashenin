@@ -126,6 +126,30 @@
   padding: 2rem;
 }
 
+.auth-card-invite {
+  max-width: 560px;
+}
+
+.auth-context-note {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 0.85rem;
+  background: #f8fbff;
+}
+
+.auth-context-note strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.auth-context-note span {
+  color: #64748b;
+  line-height: 1.5;
+}
+
 .create-room-card {
   max-width: 560px;
 }

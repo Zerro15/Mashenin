@@ -12,6 +12,7 @@ export default function RegisterPage() {
     typeof router.query.next === 'string' ? router.query.next : undefined,
     '/rooms'
   );
+  const isInviteAuth = nextPath.startsWith('/invite/');
   const { user, isChecking } = useAuthRoute('guest', { guestRedirectTo: nextPath });
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -62,18 +63,27 @@ export default function RegisterPage() {
       <Header user={user} isCheckingSession={isChecking} />
 
       <main className="main auth-page">
-        <section className="auth-card">
+        <section className={`auth-card${isInviteAuth ? ' auth-card-invite' : ''}`}>
           <h1>Создать аккаунт</h1>
           <p>
             {isChecking
               ? 'Проверяю активную сессию...'
-              : 'Создай аккаунт и сразу перейди в комнаты, чтобы начать общение.'}
+              : isInviteAuth
+                ? 'Ты создаешь аккаунт по приглашению. После этого сразу вернешься в нужный разговор.'
+                : 'Создай аккаунт и сразу перейди в комнаты, чтобы начать общение.'}
           </p>
 
           {isChecking ? (
             <p className="empty">Проверка сессии...</p>
           ) : (
             <>
+              {isInviteAuth ? (
+                <div className="auth-context-note">
+                  <strong>Регистрация по приглашению</strong>
+                  <span>Создай аккаунт, и Mashenin сразу вернет тебя к приглашению, чтобы открыть именно эту комнату.</span>
+                </div>
+              ) : null}
+
               <form className="stack-form" onSubmit={handleSubmit}>
                 <label className="field-block">
                   <span>Как тебя назвать</span>
@@ -112,12 +122,16 @@ export default function RegisterPage() {
                 {error ? <p className="form-error">{error}</p> : null}
 
                 <button className="button" type="submit" disabled={isSubmitting || isChecking}>
-                  {isSubmitting ? 'Создаю аккаунт...' : 'Создать аккаунт'}
+                  {isSubmitting ? 'Создаю аккаунт...' : isInviteAuth ? 'Создать аккаунт и вернуться к приглашению' : 'Создать аккаунт'}
                 </button>
               </form>
 
               <p className="auth-switch">
-                Уже есть аккаунт? <a href={`/login?next=${encodeURIComponent(nextPath)}`}>Войди</a>.
+                Уже есть аккаунт?{' '}
+                <a href={`/login?next=${encodeURIComponent(nextPath)}`}>
+                  {isInviteAuth ? 'Войди и вернись к приглашению' : 'Войди'}
+                </a>
+                .
               </p>
             </>
           )}
