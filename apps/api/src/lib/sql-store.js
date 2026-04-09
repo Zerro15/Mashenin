@@ -760,6 +760,94 @@ export async function joinRoom({ token, roomId }) {
   }
 }
 
+export async function leaveRoom({ token, roomId }) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const user = await getUserBySessionToken(client, token);
+    if (!user) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const roomResult = await client.query(
+      `
+        SELECT id, slug, name, kind, topic
+        FROM rooms
+        WHERE slug = $1 AND is_archived = FALSE
+        LIMIT 1
+      `,
+      [roomId]
+    );
+    const room = roomResult.rows[0];
+
+    if (!room) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(
+      `
+        UPDATE voice_sessions
+        SET ended_at = NOW()
+        WHERE user_id = $1
+          AND room_id = $2
+          AND ended_at IS NULL
+      `,
+      [user.id, room.id]
+    );
+
+    await client.query(
+      `
+        UPDATE users
+        SET
+          presence = 'online',
+          status_note = 'снова в сети',
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [user.id]
+    );
+
+    const membersResult = await client.query(
+      `
+        SELECT COUNT(*)::int AS members
+        FROM voice_sessions
+        WHERE room_id = $1
+          AND ended_at IS NULL
+      `,
+      [room.id]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      user: {
+        id: user.id,
+        name: user.display_name,
+        status: 'online',
+        note: 'снова в сети',
+        roomId: null
+      },
+      room: {
+        id: room.slug,
+        name: room.name,
+        kind: room.kind,
+        topic: room.topic,
+        members: membersResult.rows[0]?.members || 0
+      }
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function createRoomAccess({ token, roomId, ttlSeconds = 3600 }) {
   const user = await getSessionUser(token);
   const room = await getRoomById(roomId);

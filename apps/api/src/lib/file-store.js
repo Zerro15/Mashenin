@@ -370,6 +370,42 @@ export async function joinRoom({ token, roomId }) {
   return result;
 }
 
+export async function leaveRoom({ token, roomId }) {
+  let result = null;
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const room = state.rooms.find((entry) => entry.id === roomId || entry.slug === roomId);
+
+    if (!user || !room) {
+      return state;
+    }
+
+    if (user.roomId === room.id) {
+      if (room.members > 0) {
+        room.members -= 1;
+      }
+
+      user.roomId = null;
+      user.status = 'online';
+      user.note = 'снова в сети';
+    }
+
+    result = {
+      user: publicUser(user),
+      room: {
+        ...mapRoomSummary(state, room),
+        speakers: state.users.filter((friend) => friend.roomId === room.id).map(publicUser)
+      }
+    };
+
+    return state;
+  });
+
+  return result;
+}
+
 export async function createRoomAccess({ token, roomId, ttlSeconds = 3600 }) {
   const user = await getSessionUser(token);
   const room = await getRoomById(roomId);

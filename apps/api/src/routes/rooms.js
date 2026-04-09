@@ -178,31 +178,89 @@ export default async function roomRoutes(fastify) {
   // Создать LiveKit токен для комнаты
   fastify.post('/:roomId/token', async (request, reply) => {
     const { roomId } = request.params;
-    const { userId, username } = request.body;
+    const token = getSessionToken(request);
 
-    if (!userId || !username) {
-      return reply.status(400).send({ ok: false, error: 'user_id_and_username_required' });
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
     }
 
     try {
-      // Проверяем, существует ли комната
-      const room = await fastify.store.getRoom(roomId);
-      if (!room) {
-        return reply.status(404).send({ ok: false, error: 'room_not_found' });
-      }
-
-      const token = createLiveKitToken({
-        apiKey: fastify.config.livekit?.apiKey || process.env.LIVEKIT_API_KEY,
-        apiSecret: fastify.config.livekit?.apiSecret || process.env.LIVEKIT_API_SECRET,
-        identity: userId,
-        name: username,
-        roomName: roomId,
+      const access = await fastify.store.createRoomAccess({
+        token,
+        roomId,
         ttlSeconds: fastify.config.session?.ttlSeconds || 3600
       });
 
-      return { ok: true, token };
+      if (!access) {
+        return reply.status(401).send({ ok: false, error: 'voice_access_denied' });
+      }
+
+      const livekitToken = createLiveKitToken({
+        apiKey: fastify.config.livekit?.apiKey || process.env.LIVEKIT_API_KEY,
+        apiSecret: fastify.config.livekit?.apiSecret || process.env.LIVEKIT_API_SECRET,
+        identity: access.identity,
+        name: access.name,
+        roomName: access.roomName,
+        ttlSeconds: access.ttlSeconds
+      });
+
+      return {
+        ok: true,
+        data: {
+          token: livekitToken,
+          wsUrl: fastify.config.livekit?.wsUrl || process.env.LIVEKIT_WS_URL,
+          roomId: access.roomName,
+          identity: access.identity,
+          name: access.name,
+          expiresIn: access.ttlSeconds
+        }
+      };
     } catch (error) {
       fastify.log.error('Error generating LiveKit token:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
+  fastify.post('/:roomId/join', async (request, reply) => {
+    const { roomId } = request.params;
+    const token = getSessionToken(request);
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    try {
+      const result = await fastify.store.joinRoom({ token, roomId });
+
+      if (!result) {
+        return reply.status(400).send({ ok: false, error: 'join_failed' });
+      }
+
+      return { ok: true, data: result };
+    } catch (error) {
+      fastify.log.error('Error joining room voice:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
+  fastify.post('/:roomId/leave', async (request, reply) => {
+    const { roomId } = request.params;
+    const token = getSessionToken(request);
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    try {
+      const result = await fastify.store.leaveRoom({ token, roomId });
+
+      if (!result) {
+        return reply.status(400).send({ ok: false, error: 'leave_failed' });
+      }
+
+      return { ok: true, data: result };
+    } catch (error) {
+      fastify.log.error('Error leaving room voice:', error);
       return reply.status(500).send({ ok: false, error: 'internal_error' });
     }
   });

@@ -67,6 +67,10 @@ export async function joinRoom(...args) {
   return impl().joinRoom(...args);
 }
 
+export async function leaveRoom(...args) {
+  return impl().leaveRoom?.(...args) || null;
+}
+
 export async function createRoomAccess(...args) {
   return impl().createRoomAccess(...args);
 }

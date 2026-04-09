@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../../components/layout/Header';
 import { createApiClient } from '../../lib/api';
@@ -11,12 +11,20 @@ interface RoomMessage {
   text: string;
 }
 
+interface RoomSpeaker {
+  id: string;
+  name: string;
+  status: string;
+  note: string;
+}
+
 interface Room {
   id: string;
   name: string;
   topic: string;
   kind: string;
   members: number;
+  speakers: RoomSpeaker[];
 }
 
 type RoomLoadState = 'idle' | 'loading' | 'ready' | 'not_found' | 'error';
@@ -24,9 +32,17 @@ type MessagesLoadState = 'idle' | 'loading' | 'ready' | 'error';
 type InviteCreateState = 'idle' | 'loading' | 'ready' | 'error';
 type InviteCopyState = 'idle' | 'success' | 'error';
 type MessagesSyncState = 'idle' | 'syncing';
+type VoiceCallState = 'idle' | 'connecting' | 'connected' | 'error';
+
+type LiveKitModule = {
+  Room: new (options?: any) => any;
+  RoomEvent: Record<string, string>;
+  createLocalAudioTrack: (options?: any) => Promise<any>;
+};
 
 const apiClient = createApiClient();
 const ROOM_MESSAGES_POLL_INTERVAL_MS = 5000;
+const LIVEKIT_CLIENT_URL = 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.mjs';
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString('ru-RU');
@@ -60,6 +76,62 @@ function mergeMessages(currentMessages: RoomMessage[], nextMessages: RoomMessage
   );
 }
 
+function areSpeakersEqual(currentSpeakers: RoomSpeaker[] = [], nextSpeakers: RoomSpeaker[] = []) {
+  if (currentSpeakers.length !== nextSpeakers.length) {
+    return false;
+  }
+
+  return currentSpeakers.every((speaker, index) => {
+    const nextSpeaker = nextSpeakers[index];
+
+    return (
+      speaker.id === nextSpeaker?.id &&
+      speaker.name === nextSpeaker?.name &&
+      speaker.status === nextSpeaker?.status &&
+      speaker.note === nextSpeaker?.note
+    );
+  });
+}
+
+function formatVoiceCountLabel(count: number) {
+  if (count === 0) {
+    return 'Пока никто не в звонке.';
+  }
+
+  if (count === 1) {
+    return 'Сейчас в звонке 1 человек.';
+  }
+
+  return `Сейчас в звонке ${count} человек.`;
+}
+
+function getVoiceErrorMessage(error: any) {
+  const apiError = error?.response?.data?.error;
+
+  if (apiError === 'unauthorized' || apiError === 'voice_access_denied') {
+    return 'Нужна активная сессия, чтобы подключиться к звонку.';
+  }
+
+  if (apiError === 'room_not_found' || apiError === 'join_failed') {
+    return 'Не удалось подключиться именно к этой комнате.';
+  }
+
+  if (error?.name === 'NotAllowedError') {
+    return 'Браузер не дал доступ к микрофону.';
+  }
+
+  if (error?.name === 'NotFoundError') {
+    return 'Не найден микрофон для подключения.';
+  }
+
+  return 'Не удалось подключиться к звонку.';
+}
+
+async function loadLiveKitClient(): Promise<LiveKitModule> {
+  const dynamicImport = new Function('specifier', 'return import(specifier);') as (specifier: string) => Promise<LiveKitModule>;
+  return dynamicImport(LIVEKIT_CLIENT_URL);
+}
+
 export default function RoomPage() {
   const router = useRouter();
   const roomId = typeof router.query.roomId === 'string' ? router.query.roomId : '';
@@ -83,10 +155,24 @@ export default function RoomPage() {
   const [messagesReloadKey, setMessagesReloadKey] = useState(0);
   const [showCreateHandoff, setShowCreateHandoff] = useState(false);
   const [showInviteHandoff, setShowInviteHandoff] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceCallState>('idle');
+  const [voiceError, setVoiceError] = useState('');
+  const liveRoomRef = useRef<any>(null);
+  const localAudioTrackRef = useRef<any>(null);
+  const voiceTeardownRef = useRef(false);
   const hasJoinedCompanion = Boolean(room && room.members > 1 && messages.length === 0);
   const createdQuery = typeof router.query.created === 'string' ? router.query.created : '';
   const joinedQuery = typeof router.query.joined === 'string' ? router.query.joined : '';
   const shouldShowCreateHandoff = showCreateHandoff && messages.length === 0;
+  const voiceParticipantsCount = room?.speakers?.length || 0;
+  const voiceStatusText =
+    voiceState === 'connecting'
+      ? 'Подключаю тебя к звонку...'
+      : voiceState === 'connected'
+        ? 'Ты уже в звонке этой комнаты.'
+        : voiceState === 'error'
+          ? voiceError
+          : formatVoiceCountLabel(voiceParticipantsCount);
 
   useEffect(() => {
     if (!roomId || createdQuery !== '1') {
@@ -254,7 +340,8 @@ export default function RoomPage() {
               currentRoom.name === nextRoom.name &&
               currentRoom.topic === nextRoom.topic &&
               currentRoom.kind === nextRoom.kind &&
-              currentRoom.members === nextRoom.members
+              currentRoom.members === nextRoom.members &&
+              areSpeakersEqual(currentRoom.speakers, nextRoom.speakers)
             ) {
               return currentRoom;
             }
@@ -285,6 +372,138 @@ export default function RoomPage() {
       window.clearInterval(intervalId);
     };
   }, [isChecking, messagesState, room?.id, user]);
+
+  useEffect(() => {
+    return () => {
+      const currentRoom = liveRoomRef.current;
+      const currentTrack = localAudioTrackRef.current;
+
+      liveRoomRef.current = null;
+      localAudioTrackRef.current = null;
+
+      if (currentTrack?.stop) {
+        currentTrack.stop();
+      }
+
+      if (currentRoom) {
+        try {
+          currentRoom.disconnect();
+        } catch {}
+      }
+
+      if (roomId) {
+        void apiClient.post(`/api/rooms/${roomId}/leave`).catch(() => {});
+      }
+    };
+  }, [roomId]);
+
+  async function refreshRoomSnapshot() {
+    if (!roomId) {
+      return;
+    }
+
+    try {
+      const roomResponse = await apiClient.get(`/api/rooms/${roomId}`);
+
+      if (roomResponse.data?.ok && roomResponse.data.room) {
+        setRoom(roomResponse.data.room);
+      }
+    } catch {}
+  }
+
+  async function cleanupVoiceConnection(options: { notifyServer?: boolean; nextState?: VoiceCallState; nextError?: string } = {}) {
+    if (voiceTeardownRef.current) {
+      return;
+    }
+
+    voiceTeardownRef.current = true;
+
+    const { notifyServer = true, nextState = 'idle', nextError = '' } = options;
+    const currentRoom = liveRoomRef.current;
+    const currentTrack = localAudioTrackRef.current;
+
+    liveRoomRef.current = null;
+    localAudioTrackRef.current = null;
+
+    if (currentTrack?.stop) {
+      currentTrack.stop();
+    }
+
+    if (currentRoom) {
+      try {
+        currentRoom.disconnect();
+      } catch {}
+    }
+
+    if (notifyServer && roomId) {
+      try {
+        await apiClient.post(`/api/rooms/${roomId}/leave`);
+      } catch {}
+    }
+
+    setVoiceState(nextState);
+    setVoiceError(nextError);
+    await refreshRoomSnapshot();
+    voiceTeardownRef.current = false;
+  }
+
+  async function handleJoinVoice() {
+    if (!roomId || !user || voiceState === 'connecting' || voiceState === 'connected') {
+      return;
+    }
+
+    setVoiceState('connecting');
+    setVoiceError('');
+
+    try {
+      const joinResponse = await apiClient.post(`/api/rooms/${roomId}/join`);
+
+      if (!joinResponse.data?.ok) {
+        throw new Error('join_failed');
+      }
+
+      const tokenResponse = await apiClient.post(`/api/rooms/${roomId}/token`);
+      const voiceAccess = tokenResponse.data?.data;
+
+      if (!tokenResponse.data?.ok || !voiceAccess?.token || !voiceAccess?.wsUrl) {
+        throw new Error('voice_access_denied');
+      }
+
+      const liveKit = await loadLiveKitClient();
+      const connection = new liveKit.Room({
+        adaptiveStream: true,
+        dynacast: true
+      });
+
+      connection.on(liveKit.RoomEvent.Disconnected, () => {
+        if (liveRoomRef.current === connection) {
+          void cleanupVoiceConnection();
+        }
+      });
+
+      const localAudioTrack = await liveKit.createLocalAudioTrack();
+
+      await connection.connect(voiceAccess.wsUrl, voiceAccess.token);
+      await connection.localParticipant.publishTrack(localAudioTrack);
+
+      liveRoomRef.current = connection;
+      localAudioTrackRef.current = localAudioTrack;
+      setVoiceState('connected');
+      setVoiceError('');
+      await refreshRoomSnapshot();
+    } catch (error: any) {
+      const nextError = getVoiceErrorMessage(error);
+      await cleanupVoiceConnection({
+        notifyServer: true,
+        nextState: 'error',
+        nextError
+      });
+    }
+  }
+
+  async function handleLeaveVoice() {
+    await cleanupVoiceConnection();
+  }
 
   async function handleCreateInvite() {
     if (!roomId || inviteCreateState === 'loading' || inviteLink) {
@@ -440,6 +659,29 @@ export default function RoomPage() {
                   <span>Ты уже в нужном разговоре. Здесь можно читать историю, отвечать и продолжать общение.</span>
                 </div>
               ) : null}
+
+              <section className="room-voice-card">
+                <div className="room-voice-copy">
+                  <h2>Звонок в комнате</h2>
+                  <p>{voiceStatusText}</p>
+                  <span className="room-voice-meta">
+                    {voiceParticipantsCount > 0
+                      ? `Сейчас подключены: ${room.speakers.map((speaker) => speaker.name).join(', ')}`
+                      : 'Если хочешь, можно зайти в голос первым прямо из этой комнаты.'}
+                  </span>
+                </div>
+                <div className="room-voice-actions">
+                  {voiceState === 'connected' ? (
+                    <button className="button button-secondary" type="button" onClick={handleLeaveVoice}>
+                      Покинуть звонок
+                    </button>
+                  ) : (
+                    <button className="button" type="button" onClick={handleJoinVoice} disabled={voiceState === 'connecting'}>
+                      {voiceState === 'connecting' ? 'Подключаю...' : 'Присоединиться к звонку'}
+                    </button>
+                  )}
+                </div>
+              </section>
 
               <div className="message-list">
                 {messagesState === 'loading' ? (
