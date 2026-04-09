@@ -71,12 +71,29 @@ export default function CreateRoomPage() {
         {isChecking ? (
           <p className="empty">Проверка сессии...</p>
         ) : (
-          <section className="auth-card">
-            <h1>Новая комната</h1>
-            <p>Для первого разговора достаточно только названия комнаты. После создания ты сразу перейдешь внутрь.</p>
+          <section className="auth-card create-room-card">
+            <div className="create-room-intro">
+              <span className="create-room-kicker">Первый старт</span>
+              <h1>Создай первую комнату для первого разговора</h1>
+              <p>Здесь не нужно ничего настраивать заранее. Достаточно одного названия, чтобы открыть комнату и сразу перейти к следующему шагу.</p>
+            </div>
+
+            <div className="create-room-next">
+              <h2>Что будет дальше</h2>
+              <div className="create-room-next-steps" aria-label="Следующие шаги">
+                <div className="create-room-next-step">
+                  <strong>1. Комната откроется сразу после создания</strong>
+                  <span>Ты попадешь внутрь без дополнительных экранов.</span>
+                </div>
+                <div className="create-room-next-step">
+                  <strong>2. Оттуда можно пригласить первого человека ссылкой</strong>
+                  <span>Invite link уже создается прямо в комнате, когда разговор еще пустой.</span>
+                </div>
+              </div>
+            </div>
 
             <form className="stack-form" onSubmit={handleSubmit}>
-              <label className="field-block">
+              <label className="field-block field-block-primary">
                 <span>Название комнаты</span>
                 <input
                   className="text-input"
@@ -88,7 +105,7 @@ export default function CreateRoomPage() {
                   disabled={isFormLocked}
                   required
                 />
-                <small className="field-hint field-hint-strong">Это главное поле. Одного названия уже достаточно, чтобы создать комнату.</small>
+                <small className="field-hint field-hint-strong">Это главное поле. Одного названия уже достаточно, чтобы создать первую комнату.</small>
               </label>
 
               <label className="field-block field-block-secondary">

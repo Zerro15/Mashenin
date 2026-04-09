@@ -126,6 +126,71 @@
   padding: 2rem;
 }
 
+.create-room-card {
+  max-width: 560px;
+}
+
+.create-room-intro {
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+
+.create-room-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #2563eb;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.create-room-intro h1 {
+  margin: 0;
+}
+
+.create-room-intro p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.create-room-next {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 0.85rem;
+  background: #f8fbff;
+}
+
+.create-room-next h2 {
+  margin: 0 0 0.7rem;
+  font-size: 0.98rem;
+  color: #0f172a;
+}
+
+.create-room-next-steps {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.create-room-next-step {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.create-room-next-step strong {
+  color: #0f172a;
+  font-size: 0.94rem;
+}
+
+.create-room-next-step span {
+  color: #64748b;
+  line-height: 1.45;
+}
+
 .status-card {
   max-width: 640px;
   margin: 0 auto;
@@ -279,6 +344,13 @@
 .field-block {
   display: grid;
   gap: 0.4rem;
+}
+
+.field-block-primary {
+  padding: 0.95rem 1rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 0.85rem;
+  background: #f8fbff;
 }
 
 .field-block span {
