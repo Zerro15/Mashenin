@@ -108,21 +108,39 @@ export async function getSummary() {
   };
 }
 
-export async function getRooms() {
+export async function getRooms({ token } = {}) {
+  if (!token) {
+    return [];
+  }
+
   const pool = getPool();
-  const result = await pool.query(`
-    SELECT
-      r.slug AS id,
-      r.name,
-      r.kind,
-      r.topic,
-      COUNT(rm.user_id)::int AS members
-    FROM rooms r
-    LEFT JOIN room_memberships rm ON rm.room_id = r.id
-    WHERE r.is_archived = FALSE
-    GROUP BY r.id
-    ORDER BY r.created_at ASC
-  `);
+  const user = await getUserBySessionToken(pool, token);
+
+  if (!user) {
+    return [];
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        r.slug AS id,
+        r.name,
+        r.kind,
+        r.topic,
+        COALESCE(room_counts.members, 0)::int AS members
+      FROM room_memberships my_membership
+      JOIN rooms r ON r.id = my_membership.room_id
+      LEFT JOIN (
+        SELECT room_id, COUNT(*)::int AS members
+        FROM room_memberships
+        GROUP BY room_id
+      ) room_counts ON room_counts.room_id = r.id
+      WHERE my_membership.user_id = $1
+        AND r.is_archived = FALSE
+      ORDER BY r.created_at ASC
+    `,
+    [user.id]
+  );
 
   return result.rows.map((row) => ({
     id: row.id,

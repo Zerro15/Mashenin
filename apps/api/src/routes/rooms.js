@@ -14,8 +14,10 @@ function getSessionToken(request) {
 export default async function roomRoutes(fastify) {
   // Получить список комнат пользователя
   fastify.get('/', async (request, reply) => {
+    const token = getSessionToken(request);
+
     try {
-      const rooms = await fastify.store.getRooms();
+      const rooms = await fastify.store.getRooms({ token });
       return { ok: true, rooms };
     } catch (error) {
       fastify.log.error('Error fetching rooms:', error);

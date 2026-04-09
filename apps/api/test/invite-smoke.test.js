@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { buildServer } from '../src/server.js';
+import { getStateFilePath } from '../src/lib/file-store.js';
 
 function uniqueEmail() {
   return `invite.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -8,6 +10,7 @@ function uniqueEmail() {
 
 test('Invite smoke: create room invite -> preview -> accept -> open room -> send message', async () => {
   process.env.DATA_PROVIDER = 'file';
+  fs.rmSync(getStateFilePath(), { force: true });
 
   const app = await buildServer();
 
@@ -30,6 +33,18 @@ test('Invite smoke: create room invite -> preview -> accept -> open room -> send
 
     const inviterToken = inviterRegisterResponse.json().token;
 
+    const inviterInitialRoomsResponse = await app.inject({
+      method: 'GET',
+      url: '/api/rooms',
+      headers: {
+        authorization: `Bearer ${inviterToken}`
+      }
+    });
+
+    assert.equal(inviterInitialRoomsResponse.statusCode, 200);
+    assert.equal(inviterInitialRoomsResponse.json().ok, true);
+    assert.deepEqual(inviterInitialRoomsResponse.json().rooms, []);
+
     const createRoomResponse = await app.inject({
       method: 'POST',
       url: '/api/rooms',
@@ -46,6 +61,19 @@ test('Invite smoke: create room invite -> preview -> accept -> open room -> send
 
     const room = createRoomResponse.json().room;
     assert.equal(room.members, 1);
+
+    const inviterRoomsResponse = await app.inject({
+      method: 'GET',
+      url: '/api/rooms',
+      headers: {
+        authorization: `Bearer ${inviterToken}`
+      }
+    });
+
+    assert.equal(inviterRoomsResponse.statusCode, 200);
+    assert.equal(inviterRoomsResponse.json().ok, true);
+    assert.equal(inviterRoomsResponse.json().rooms.length, 1);
+    assert.equal(inviterRoomsResponse.json().rooms[0].id, room.id);
 
     const createInviteResponse = await app.inject({
       method: 'POST',
@@ -101,6 +129,18 @@ test('Invite smoke: create room invite -> preview -> accept -> open room -> send
 
     const guestToken = guestRegisterResponse.json().token;
 
+    const guestInitialRoomsResponse = await app.inject({
+      method: 'GET',
+      url: '/api/rooms',
+      headers: {
+        authorization: `Bearer ${guestToken}`
+      }
+    });
+
+    assert.equal(guestInitialRoomsResponse.statusCode, 200);
+    assert.equal(guestInitialRoomsResponse.json().ok, true);
+    assert.deepEqual(guestInitialRoomsResponse.json().rooms, []);
+
     const acceptResponse = await app.inject({
       method: 'POST',
       url: `/api/invites/${inviteCode}/accept`,
@@ -145,6 +185,20 @@ test('Invite smoke: create room invite -> preview -> accept -> open room -> send
     assert.equal(roomResponse.json().room.id, room.id);
     assert.equal(roomResponse.json().room.members, 2);
 
+    const guestRoomsResponse = await app.inject({
+      method: 'GET',
+      url: '/api/rooms',
+      headers: {
+        authorization: `Bearer ${guestToken}`
+      }
+    });
+
+    assert.equal(guestRoomsResponse.statusCode, 200);
+    assert.equal(guestRoomsResponse.json().ok, true);
+    assert.equal(guestRoomsResponse.json().rooms.length, 1);
+    assert.equal(guestRoomsResponse.json().rooms[0].id, room.id);
+    assert.equal(guestRoomsResponse.json().rooms[0].members, 2);
+
     const sendMessageResponse = await app.inject({
       method: 'POST',
       url: `/api/rooms/${room.id}/messages`,
@@ -174,5 +228,6 @@ test('Invite smoke: create room invite -> preview -> accept -> open room -> send
     assert.ok(messagesResponse.json().messages.some((message) => message.text === 'Hello from invited user'));
   } finally {
     await app.close();
+    fs.rmSync(getStateFilePath(), { force: true });
   }
 });

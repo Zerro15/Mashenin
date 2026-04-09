@@ -183,6 +183,15 @@ function getRoomMembershipCount(state, roomId) {
   return (state.roomMemberships || []).filter((membership) => membership.roomId === roomId).length;
 }
 
+function getSessionUserId(state, token) {
+  if (!token) {
+    return null;
+  }
+
+  const session = (state.sessions || []).find((entry) => entry.token === token);
+  return session?.userId || null;
+}
+
 function mapRoomSummary(state, room) {
   return {
     id: room.id,
@@ -207,9 +216,23 @@ export async function getSummary() {
   };
 }
 
-export async function getRooms() {
+export async function getRooms({ token } = {}) {
   const state = readState();
-  return state.rooms.map((room) => mapRoomSummary(state, room));
+  const userId = getSessionUserId(state, token);
+
+  if (!userId) {
+    return [];
+  }
+
+  const userRoomIds = new Set(
+    (state.roomMemberships || [])
+      .filter((membership) => membership.userId === userId)
+      .map((membership) => membership.roomId)
+  );
+
+  return state.rooms
+    .filter((room) => userRoomIds.has(room.id))
+    .map((room) => mapRoomSummary(state, room));
 }
 
 export async function getFriends() {

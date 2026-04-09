@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { buildServer } from '../src/server.js';
+import { getStateFilePath } from '../src/lib/file-store.js';
 
 function uniqueEmail() {
   return `smoke.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -8,6 +10,7 @@ function uniqueEmail() {
 
 test('MVP smoke: login -> create room -> open room -> load message history -> send message -> logout', async () => {
   process.env.DATA_PROVIDER = 'file';
+  fs.rmSync(getStateFilePath(), { force: true });
 
   const app = await buildServer();
 
@@ -57,6 +60,18 @@ test('MVP smoke: login -> create room -> open room -> load message history -> se
     assert.equal(meResponse.statusCode, 200);
     assert.equal(meResponse.json().user.email, email);
 
+    const initialRoomsResponse = await app.inject({
+      method: 'GET',
+      url: '/api/rooms',
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    assert.equal(initialRoomsResponse.statusCode, 200);
+    assert.equal(initialRoomsResponse.json().ok, true);
+    assert.deepEqual(initialRoomsResponse.json().rooms, []);
+
     const roomName = `Smoke Room ${Date.now()}`;
     const roomTopic = 'Smoke topic for create room';
 
@@ -98,7 +113,7 @@ test('MVP smoke: login -> create room -> open room -> load message history -> se
     const roomsBody = roomsResponse.json();
     assert.equal(roomsBody.ok, true);
     assert.ok(Array.isArray(roomsBody.rooms));
-    assert.ok(roomsBody.rooms.length > 0);
+    assert.equal(roomsBody.rooms.length, 1);
     assert.ok(
       roomsBody.rooms.some(
         (room) =>
@@ -198,5 +213,6 @@ test('MVP smoke: login -> create room -> open room -> load message history -> se
     assert.equal(meAfterLogoutResponse.json().error, 'invalid_token');
   } finally {
     await app.close();
+    fs.rmSync(getStateFilePath(), { force: true });
   }
 });
