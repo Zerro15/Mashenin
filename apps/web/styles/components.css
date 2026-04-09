@@ -492,6 +492,11 @@
   line-height: 1.5;
 }
 
+.room-handoff-signal-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
 .message-list {
   display: grid;
   gap: 0.85rem;

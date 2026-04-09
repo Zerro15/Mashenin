@@ -82,8 +82,10 @@ export default function RoomPage() {
   const [roomReloadKey, setRoomReloadKey] = useState(0);
   const [messagesReloadKey, setMessagesReloadKey] = useState(0);
   const [showCreateHandoff, setShowCreateHandoff] = useState(false);
+  const [showInviteHandoff, setShowInviteHandoff] = useState(false);
   const hasJoinedCompanion = Boolean(room && room.members > 1 && messages.length === 0);
   const createdQuery = typeof router.query.created === 'string' ? router.query.created : '';
+  const joinedQuery = typeof router.query.joined === 'string' ? router.query.joined : '';
   const shouldShowCreateHandoff = showCreateHandoff && messages.length === 0;
 
   useEffect(() => {
@@ -94,6 +96,15 @@ export default function RoomPage() {
     setShowCreateHandoff(true);
     void router.replace(`/room/${roomId}`, undefined, { shallow: true });
   }, [createdQuery, roomId, router]);
+
+  useEffect(() => {
+    if (!roomId || joinedQuery !== '1') {
+      return;
+    }
+
+    setShowInviteHandoff(true);
+    void router.replace(`/room/${roomId}`, undefined, { shallow: true });
+  }, [joinedQuery, roomId, router]);
 
   useEffect(() => {
     if (!roomId || isChecking || !user) {
@@ -420,6 +431,13 @@ export default function RoomPage() {
                 <div className="room-handoff-signal">
                   <strong>Комната создана.</strong>
                   <span>Теперь можно написать первое сообщение или сразу пригласить человека ссылкой из этого разговора.</span>
+                </div>
+              ) : null}
+
+              {showInviteHandoff ? (
+                <div className="room-handoff-signal room-handoff-signal-success">
+                  <strong>Приглашение сработало.</strong>
+                  <span>Ты уже в нужном разговоре. Здесь можно читать историю, отвечать и продолжать общение.</span>
                 </div>
               ) : null}
 

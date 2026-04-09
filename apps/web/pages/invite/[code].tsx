@@ -115,7 +115,7 @@ export default function InvitePage() {
         }
 
         setAcceptState('done');
-        router.replace(`/room/${response.data.room.id}`);
+        router.replace(`/room/${response.data.room.id}?joined=1`);
       } catch (error: any) {
         if (!isActive) {
           return;
