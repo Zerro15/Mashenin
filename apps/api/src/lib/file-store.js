@@ -208,7 +208,8 @@ export async function getSummary() {
 }
 
 export async function getRooms() {
-  return readState().rooms;
+  const state = readState();
+  return state.rooms.map((room) => mapRoomSummary(state, room));
 }
 
 export async function getFriends() {
@@ -230,7 +231,7 @@ export async function getRoomById(roomId) {
   const speakers = state.users.filter((friend) => friend.roomId === roomId);
 
   return {
-    ...room,
+    ...mapRoomSummary(state, room),
     speakers: speakers.map(publicUser)
   };
 }
@@ -403,11 +404,7 @@ export async function createRoom({ token, name, topic = '' }) {
     });
 
     createdRoom = {
-      id: room.id,
-      name: room.name,
-      kind: room.kind,
-      topic: room.topic,
-      members: room.members,
+      ...mapRoomSummary(state, room),
       speakers: []
     };
 

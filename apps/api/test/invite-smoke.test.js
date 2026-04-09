@@ -45,6 +45,7 @@ test('Invite smoke: create room invite -> preview -> accept -> open room -> send
     assert.equal(createRoomResponse.statusCode, 200);
 
     const room = createRoomResponse.json().room;
+    assert.equal(room.members, 1);
 
     const createInviteResponse = await app.inject({
       method: 'POST',
@@ -129,6 +130,7 @@ test('Invite smoke: create room invite -> preview -> accept -> open room -> send
     assert.equal(acceptAgainResponse.json().ok, true);
     assert.equal(acceptAgainResponse.json().joined, false);
     assert.equal(acceptAgainResponse.json().room.id, room.id);
+    assert.equal(acceptAgainResponse.json().room.members, 2);
 
     const roomResponse = await app.inject({
       method: 'GET',
@@ -141,6 +143,7 @@ test('Invite smoke: create room invite -> preview -> accept -> open room -> send
     assert.equal(roomResponse.statusCode, 200);
     assert.equal(roomResponse.json().ok, true);
     assert.equal(roomResponse.json().room.id, room.id);
+    assert.equal(roomResponse.json().room.members, 2);
 
     const sendMessageResponse = await app.inject({
       method: 'POST',

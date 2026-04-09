@@ -81,7 +81,7 @@ test('MVP smoke: login -> create room -> open room -> load message history -> se
     assert.equal(createRoomBody.room.name, roomName);
     assert.equal(createRoomBody.room.kind, 'persistent');
     assert.equal(createRoomBody.room.topic, roomTopic);
-    assert.equal(typeof createRoomBody.room.members, 'number');
+    assert.equal(createRoomBody.room.members, 1);
 
     const roomId = createRoomBody.room.id;
 
@@ -106,7 +106,7 @@ test('MVP smoke: login -> create room -> open room -> load message history -> se
           room.name === roomName &&
           room.kind === 'persistent' &&
           room.topic === roomTopic &&
-          typeof room.members === 'number'
+          room.members === 1
       )
     );
 
@@ -126,7 +126,7 @@ test('MVP smoke: login -> create room -> open room -> load message history -> se
     assert.equal(roomBody.room.name, roomName);
     assert.equal(roomBody.room.kind, 'persistent');
     assert.equal(roomBody.room.topic, roomTopic);
-    assert.equal(typeof roomBody.room.members, 'number');
+    assert.equal(roomBody.room.members, 1);
 
     const messagesResponse = await app.inject({
       method: 'GET',

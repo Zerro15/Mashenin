@@ -116,9 +116,9 @@ export async function getRooms() {
       r.name,
       r.kind,
       r.topic,
-      COUNT(vs.id) FILTER (WHERE vs.ended_at IS NULL)::int AS members
+      COUNT(rm.user_id)::int AS members
     FROM rooms r
-    LEFT JOIN voice_sessions vs ON vs.room_id = r.id
+    LEFT JOIN room_memberships rm ON rm.room_id = r.id
     WHERE r.is_archived = FALSE
     GROUP BY r.id
     ORDER BY r.created_at ASC
@@ -186,9 +186,9 @@ export async function getRoomById(roomId) {
         r.name,
         r.kind,
         r.topic,
-        COUNT(vs.id) FILTER (WHERE vs.ended_at IS NULL)::int AS members
+        COUNT(rm.user_id)::int AS members
       FROM rooms r
-      LEFT JOIN voice_sessions vs ON vs.room_id = r.id
+      LEFT JOIN room_memberships rm ON rm.room_id = r.id
       WHERE r.slug = $1
       GROUP BY r.id
     `,
@@ -906,6 +906,15 @@ export async function createRoom({ token, name, topic = '' }) {
       [room.id, user.id]
     );
 
+    const memberCountResult = await client.query(
+      `
+        SELECT COUNT(*)::int AS members
+        FROM room_memberships
+        WHERE room_id = $1
+      `,
+      [room.id]
+    );
+
     await client.query('COMMIT');
 
     return {
@@ -913,7 +922,7 @@ export async function createRoom({ token, name, topic = '' }) {
       name: room.name,
       kind: room.kind,
       topic: room.topic,
-      members: 0,
+      members: memberCountResult.rows[0]?.members || 0,
       speakers: []
     };
   } catch (error) {
