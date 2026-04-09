@@ -21,6 +21,7 @@ export default function Rooms() {
   const [roomsState, setRoomsState] = useState<RoomsLoadState>('loading');
   const [roomsError, setRoomsError] = useState('');
   const [roomsReloadKey, setRoomsReloadKey] = useState(0);
+  const isFirstStart = roomsState === 'empty';
 
   useEffect(() => {
     if (isChecking || !user) {
@@ -84,7 +85,11 @@ export default function Rooms() {
               <div className="page-intro-bar">
                 <div>
                   <h1>Комнаты</h1>
-                  <p>Здесь можно открыть существующую комнату или создать новую для своего разговора.</p>
+                  <p>
+                    {isFirstStart
+                      ? `${user?.name ? `${user.name}, ` : ''}начни с первой комнаты и пригласи человека, чтобы разговор появился прямо здесь.`
+                      : 'Здесь можно открыть существующую комнату или создать новую для своего разговора.'}
+                  </p>
                 </div>
                 <a className="button" href="/rooms/create">
                   Создать комнату
@@ -106,9 +111,19 @@ export default function Rooms() {
                   </div>
                 </section>
               ) : roomsState === 'empty' ? (
-                <section className="status-card">
-                  <h1>Пока нет комнат</h1>
-                  <p>Начни с простой комнаты для первого разговора. После создания ты сразу попадешь внутрь и сможешь написать сообщение.</p>
+                <section className="status-card first-start-card">
+                  <h1>{user?.name ? `${user.name}, начни первый разговор` : 'Начни первый разговор'}</h1>
+                  <p>Пока у тебя нет комнат. Самый понятный стартовый сценарий здесь простой: создай первую комнату и пригласи в нее человека.</p>
+                  <div className="first-start-steps" aria-label="Первый сценарий">
+                    <div className="first-start-step">
+                      <strong>1. Создай первую комнату</strong>
+                      <span>Достаточно одного названия. После создания ты сразу попадешь внутрь.</span>
+                    </div>
+                    <div className="first-start-step">
+                      <strong>2. Пригласи человека ссылкой</strong>
+                      <span>Внутри комнаты можно сразу подготовить invite link и отправить его собеседнику.</span>
+                    </div>
+                  </div>
                   <div className="status-actions">
                     <a className="button" href="/rooms/create">
                       Создать комнату
