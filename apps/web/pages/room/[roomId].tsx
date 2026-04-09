@@ -81,7 +81,19 @@ export default function RoomPage() {
   const [messagesSyncState, setMessagesSyncState] = useState<MessagesSyncState>('idle');
   const [roomReloadKey, setRoomReloadKey] = useState(0);
   const [messagesReloadKey, setMessagesReloadKey] = useState(0);
+  const [showCreateHandoff, setShowCreateHandoff] = useState(false);
   const hasJoinedCompanion = Boolean(room && room.members > 1 && messages.length === 0);
+  const createdQuery = typeof router.query.created === 'string' ? router.query.created : '';
+  const shouldShowCreateHandoff = showCreateHandoff && messages.length === 0;
+
+  useEffect(() => {
+    if (!roomId || createdQuery !== '1') {
+      return;
+    }
+
+    setShowCreateHandoff(true);
+    void router.replace(`/room/${roomId}`, undefined, { shallow: true });
+  }, [createdQuery, roomId, router]);
 
   useEffect(() => {
     if (!roomId || isChecking || !user) {
@@ -403,6 +415,13 @@ export default function RoomPage() {
                   <div className="conversation-meta">{formatMembersLabel(room.members)}</div>
                 </div>
               </div>
+
+              {shouldShowCreateHandoff ? (
+                <div className="room-handoff-signal">
+                  <strong>Комната создана.</strong>
+                  <span>Теперь можно написать первое сообщение или сразу пригласить человека ссылкой из этого разговора.</span>
+                </div>
+              ) : null}
 
               <div className="message-list">
                 {messagesState === 'loading' ? (

@@ -49,7 +49,7 @@ export default function CreateRoomPage() {
       }
 
       setSubmitState('success');
-      await router.push(`/room/${response.data.room.id}`);
+      await router.push(`/room/${response.data.room.id}?created=1`);
     } catch (submitError: any) {
       const nextError =
         submitError?.response?.status === 401
@@ -123,7 +123,7 @@ export default function CreateRoomPage() {
               </label>
 
               {submitState === 'error' && submitError ? <p className="form-error">{submitError}</p> : null}
-              {isRedirecting ? <p>Комната создана. Открываем...</p> : null}
+              {isRedirecting ? <p>Комната создана. Открываем разговор...</p> : null}
 
               <div className="form-actions">
                 <a

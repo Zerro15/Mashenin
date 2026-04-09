@@ -448,6 +448,26 @@
   color: #475569;
 }
 
+.room-handoff-signal {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.85rem;
+  background: #f8fbff;
+}
+
+.room-handoff-signal strong {
+  color: #0f172a;
+  font-size: 0.96rem;
+}
+
+.room-handoff-signal span {
+  color: #475569;
+  line-height: 1.5;
+}
+
 .message-list {
   display: grid;
   gap: 0.85rem;
