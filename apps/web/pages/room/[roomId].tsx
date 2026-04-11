@@ -40,9 +40,44 @@ type LiveKitModule = {
   createLocalAudioTrack: (options?: any) => Promise<any>;
 };
 
+type VoiceParticipantTone = 'connecting' | 'calm' | 'speaking' | 'muted' | 'no-signal' | 'missing-track';
+
+interface VoiceParticipantDiagnostics {
+  id: string;
+  name: string;
+  isLocal: boolean;
+  isInCall: boolean;
+  isPresentInSdk: boolean;
+  hasAudioTrack: boolean;
+  isTrackSubscribed: boolean;
+  isMuted: boolean;
+  isSpeaking: boolean;
+  signalPercent: number;
+  tone: VoiceParticipantTone;
+  statusLabel: string;
+  detailLabel: string;
+}
+
+interface VoiceDiagnosticsSummary {
+  wsUrl: string;
+  localTrackCreated: boolean;
+  localTrackPublished: boolean;
+  localTrackMuted: boolean;
+  localSignalPercent: number;
+  remoteAudioTrackCount: number;
+  remoteSubscribedTrackCount: number;
+  attachedAudioElements: number;
+  playingAudioElements: number;
+  activeSpeakerNames: string[];
+}
+
 const apiClient = createApiClient();
 const ROOM_MESSAGES_POLL_INTERVAL_MS = 5000;
+const VOICE_DIAGNOSTICS_POLL_INTERVAL_MS = 250;
 const LIVEKIT_CLIENT_URL = 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.mjs';
+const LOCAL_SPEAKING_THRESHOLD = 7;
+const REMOTE_SPEAKING_THRESHOLD = 5;
+const REMOTE_SPEAKING_HOLD_MS = 1500;
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString('ru-RU');
@@ -132,6 +167,111 @@ async function loadLiveKitClient(): Promise<LiveKitModule> {
   return dynamicImport(LIVEKIT_CLIENT_URL);
 }
 
+function clampSignalPercent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function hasRecentRemoteSpeakingSignal(
+  participantId: string,
+  recentSignals: Map<string, number>,
+  now: number
+) {
+  const seenAt = recentSignals.get(participantId);
+  return typeof seenAt === 'number' && now - seenAt <= REMOTE_SPEAKING_HOLD_MS;
+}
+
+function getParticipantTrackPublications(participant: any): any[] {
+  if (participant?.audioTrackPublications?.values) {
+    return Array.from<any>(participant.audioTrackPublications.values());
+  }
+
+  if (participant?.trackPublications?.values) {
+    return Array.from<any>(participant.trackPublications.values());
+  }
+
+  return [];
+}
+
+function getMicrophonePublication(participant: any): any | null {
+  const publications = getParticipantTrackPublications(participant);
+
+  return (
+    publications.find((publication: any) => {
+      return (
+        publication?.source === 'microphone' ||
+        publication?.kind === 'audio' ||
+        publication?.track?.kind === 'audio' ||
+        publication?.trackName === 'microphone'
+      );
+    }) || null
+  );
+}
+
+function getTrackKey(track: any) {
+  return track?.sid || track?.mediaStreamTrack?.id || track?.id || '';
+}
+
+function createInitialVoiceDiagnostics(): VoiceDiagnosticsSummary {
+  return {
+    wsUrl: '',
+    localTrackCreated: false,
+    localTrackPublished: false,
+    localTrackMuted: false,
+    localSignalPercent: 0,
+    remoteAudioTrackCount: 0,
+    remoteSubscribedTrackCount: 0,
+    attachedAudioElements: 0,
+    playingAudioElements: 0,
+    activeSpeakerNames: []
+  };
+}
+
+function buildFallbackVoiceParticipants(
+  room: Room | null,
+  user: { id: string; name: string } | null,
+  voiceState: VoiceCallState
+): VoiceParticipantDiagnostics[] {
+  const fallbackParticipants = (room?.speakers || []).map((speaker) => ({
+    id: speaker.id,
+    name: speaker.name,
+    isLocal: speaker.id === user?.id,
+    isInCall: true,
+    isPresentInSdk: false,
+    hasAudioTrack: false,
+    isTrackSubscribed: false,
+    isMuted: false,
+    isSpeaking: false,
+    signalPercent: 0,
+    tone: 'missing-track' as VoiceParticipantTone,
+    statusLabel: 'в звонке',
+    detailLabel: 'LiveKit-диагностика появится после твоего подключения.'
+  }));
+
+  if (
+    voiceState === 'connecting' &&
+    user &&
+    !fallbackParticipants.some((participant) => participant.id === user.id)
+  ) {
+    fallbackParticipants.unshift({
+      id: user.id,
+      name: user.name,
+      isLocal: true,
+      isInCall: true,
+      isPresentInSdk: false,
+      hasAudioTrack: false,
+      isTrackSubscribed: false,
+      isMuted: false,
+      isSpeaking: false,
+      signalPercent: 0,
+      tone: 'connecting',
+      statusLabel: 'подключаюсь',
+      detailLabel: 'Запрашиваю доступ к звонку и готовлю аудиотрек.'
+    });
+  }
+
+  return fallbackParticipants;
+}
+
 export default function RoomPage() {
   const router = useRouter();
   const roomId = typeof router.query.roomId === 'string' ? router.query.roomId : '';
@@ -157,9 +297,25 @@ export default function RoomPage() {
   const [showInviteHandoff, setShowInviteHandoff] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceCallState>('idle');
   const [voiceError, setVoiceError] = useState('');
+  const [voiceParticipants, setVoiceParticipants] = useState<VoiceParticipantDiagnostics[]>([]);
+  const [voiceDiagnostics, setVoiceDiagnostics] = useState<VoiceDiagnosticsSummary>(createInitialVoiceDiagnostics());
+  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const liveRoomRef = useRef<any>(null);
   const localAudioTrackRef = useRef<any>(null);
   const voiceTeardownRef = useRef(false);
+  const roomRef = useRef<Room | null>(null);
+  const userRef = useRef(user);
+  const voiceStateRef = useRef<VoiceCallState>('idle');
+  const voiceWsUrlRef = useRef('');
+  const remoteAudioMountRef = useRef<HTMLDivElement | null>(null);
+  const remoteAudioElementsRef = useRef<Map<string, HTMLMediaElement[]>>(new Map());
+  const voiceDiagnosticsIntervalRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
+  const audioMeterSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const audioMeterFrameRef = useRef<number | null>(null);
+  const localMicSignalPercentRef = useRef(0);
+  const remoteSpeakingSeenAtRef = useRef<Map<string, number>>(new Map());
   const hasJoinedCompanion = Boolean(room && room.members > 1 && messages.length === 0);
   const createdQuery = typeof router.query.created === 'string' ? router.query.created : '';
   const joinedQuery = typeof router.query.joined === 'string' ? router.query.joined : '';
@@ -173,6 +329,23 @@ export default function RoomPage() {
         : voiceState === 'error'
           ? voiceError
           : formatVoiceCountLabel(voiceParticipantsCount);
+  const displayedVoiceParticipants =
+    voiceParticipants.length > 0 ? voiceParticipants : buildFallbackVoiceParticipants(room, user, voiceState);
+  const voiceActiveSpeakersText = voiceDiagnostics.activeSpeakerNames.length
+    ? voiceDiagnostics.activeSpeakerNames.join(', ')
+    : 'пока никто не говорит';
+
+  useEffect(() => {
+    roomRef.current = room;
+  }, [room]);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    voiceStateRef.current = voiceState;
+  }, [voiceState]);
 
   useEffect(() => {
     if (!roomId || createdQuery !== '1') {
@@ -374,12 +547,24 @@ export default function RoomPage() {
   }, [isChecking, messagesState, room?.id, user]);
 
   useEffect(() => {
+    if (liveRoomRef.current) {
+      syncVoiceDiagnostics(liveRoomRef.current);
+      return;
+    }
+
+    setVoiceParticipants(buildFallbackVoiceParticipants(room, user, voiceState));
+  }, [room, user, voiceState]);
+
+  useEffect(() => {
     return () => {
       const currentRoom = liveRoomRef.current;
       const currentTrack = localAudioTrackRef.current;
 
       liveRoomRef.current = null;
       localAudioTrackRef.current = null;
+      stopVoiceDiagnosticsPolling();
+      stopLocalMicMeter();
+      detachAllRemoteAudioTracks();
 
       if (currentTrack?.stop) {
         currentTrack.stop();
@@ -396,6 +581,409 @@ export default function RoomPage() {
       }
     };
   }, [roomId]);
+
+  function stopVoiceDiagnosticsPolling() {
+    if (voiceDiagnosticsIntervalRef.current !== null) {
+      window.clearInterval(voiceDiagnosticsIntervalRef.current);
+      voiceDiagnosticsIntervalRef.current = null;
+    }
+  }
+
+  function stopLocalMicMeter() {
+    if (audioMeterFrameRef.current !== null) {
+      cancelAnimationFrame(audioMeterFrameRef.current);
+      audioMeterFrameRef.current = null;
+    }
+
+    if (audioMeterSourceRef.current) {
+      audioMeterSourceRef.current.disconnect();
+      audioMeterSourceRef.current = null;
+    }
+
+    audioAnalyserRef.current = null;
+
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+
+    localMicSignalPercentRef.current = 0;
+  }
+
+  function detachAllRemoteAudioTracks() {
+    remoteAudioElementsRef.current.forEach((elements) => {
+      elements.forEach((element) => element.remove());
+    });
+    remoteAudioElementsRef.current.clear();
+    remoteSpeakingSeenAtRef.current.clear();
+  }
+
+  function attachRemoteAudioTrack(track: any) {
+    if (!track || track.kind !== 'audio') {
+      return;
+    }
+
+    const mount = remoteAudioMountRef.current;
+
+    if (!mount) {
+      return;
+    }
+
+    const trackKey = getTrackKey(track);
+
+    if (!trackKey || remoteAudioElementsRef.current.has(trackKey)) {
+      return;
+    }
+
+    const element = track.attach();
+    element.autoplay = true;
+    element.playsInline = true;
+    element.muted = false;
+    element.dataset.voiceTrack = trackKey;
+    mount.appendChild(element);
+
+    remoteAudioElementsRef.current.set(trackKey, [element]);
+
+    const playPromise = typeof element.play === 'function' ? element.play() : undefined;
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch((playbackError: any) => {
+        console.error('Failed to start remote audio playback:', playbackError);
+        syncVoiceDiagnostics();
+      });
+    }
+  }
+
+  function detachRemoteAudioTrack(track: any) {
+    if (!track) {
+      return;
+    }
+
+    const trackKey = getTrackKey(track);
+    const attachedElements = remoteAudioElementsRef.current.get(trackKey);
+
+    if (attachedElements) {
+      attachedElements.forEach((element) => element.remove());
+      remoteAudioElementsRef.current.delete(trackKey);
+    }
+
+    if (track.detach) {
+      track.detach().forEach((element: HTMLMediaElement) => element.remove());
+    }
+  }
+
+  function startLocalMicMeter(track: any) {
+    stopLocalMicMeter();
+
+    if (typeof window === 'undefined' || !track?.mediaStreamTrack) {
+      return;
+    }
+
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    try {
+      const audioContext = new AudioContextCtor();
+      const analyser = audioContext.createAnalyser();
+      const stream = new MediaStream([track.mediaStreamTrack]);
+      const source = audioContext.createMediaStreamSource(stream);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      audioContextRef.current = audioContext;
+      audioAnalyserRef.current = analyser;
+      audioMeterSourceRef.current = source;
+
+      const tick = () => {
+        if (!audioAnalyserRef.current) {
+          return;
+        }
+
+        audioAnalyserRef.current.getByteTimeDomainData(data);
+
+        let peak = 0;
+        for (let index = 0; index < data.length; index += 1) {
+          const value = Math.abs(data[index] - 128) / 128;
+          if (value > peak) {
+            peak = value;
+          }
+        }
+
+        const nextPercent = clampSignalPercent(peak * 220);
+        localMicSignalPercentRef.current = nextPercent;
+
+        audioMeterFrameRef.current = requestAnimationFrame(tick);
+      };
+
+      tick();
+    } catch (meterError) {
+      console.error('Failed to start local microphone meter:', meterError);
+      stopLocalMicMeter();
+    }
+  }
+
+  function syncVoiceDiagnostics(connection: any = liveRoomRef.current) {
+    const currentRoom = roomRef.current;
+    const currentUser = userRef.current;
+    const localTrack = localAudioTrackRef.current;
+    const nextDiagnostics = createInitialVoiceDiagnostics();
+
+    nextDiagnostics.wsUrl = voiceWsUrlRef.current;
+    nextDiagnostics.localTrackCreated = Boolean(localTrack?.mediaStreamTrack);
+    const attachedAudioElements = Array.from(remoteAudioElementsRef.current.values()).flat();
+    nextDiagnostics.attachedAudioElements = attachedAudioElements.length;
+    nextDiagnostics.playingAudioElements = attachedAudioElements.filter((element) => {
+      return !element.paused && !element.ended && Boolean(element.srcObject);
+    }).length;
+
+    if (!connection || !currentUser) {
+      setVoiceParticipants(buildFallbackVoiceParticipants(currentRoom, currentUser, voiceStateRef.current));
+      setVoiceDiagnostics({
+        ...nextDiagnostics,
+        localTrackCreated: nextDiagnostics.localTrackCreated,
+        localSignalPercent: localMicSignalPercentRef.current,
+        localTrackMuted: Boolean(localTrack?.isMuted)
+      });
+      return;
+    }
+
+    const sdkRemoteParticipants: any[] = connection?.remoteParticipants?.values
+      ? Array.from<any>(connection.remoteParticipants.values())
+      : [];
+    const remoteParticipantById = new Map(
+      sdkRemoteParticipants.map((participant: any) => [participant.identity || participant.sid, participant])
+    );
+    const visibleIds = new Set<string>();
+    const nextParticipants: VoiceParticipantDiagnostics[] = [];
+    const activeSpeakerIds = new Set(
+      Array.isArray(connection?.activeSpeakers)
+        ? connection.activeSpeakers.map((participant: any) => participant.identity || participant.sid)
+        : []
+    );
+    const now = Date.now();
+
+    const localParticipant = connection.localParticipant;
+    const localPublication = getMicrophonePublication(localParticipant);
+    const localTrackPublished = Boolean(localPublication?.trackSid || localPublication?.track || localTrack?.sid);
+    const localTrackMuted = Boolean(localTrack?.isMuted || localPublication?.isMuted || localParticipant?.isMicrophoneEnabled === false);
+    const localSignalPercent = localTrackMuted ? 0 : localMicSignalPercentRef.current;
+    const localIsSpeaking =
+      !localTrackMuted &&
+      (Boolean(localParticipant?.isSpeaking) || localSignalPercent >= LOCAL_SPEAKING_THRESHOLD);
+
+    nextDiagnostics.localTrackPublished = localTrackPublished;
+    nextDiagnostics.localTrackMuted = localTrackMuted;
+    nextDiagnostics.localSignalPercent = localSignalPercent;
+
+    visibleIds.add(currentUser.id);
+    nextParticipants.push({
+      id: currentUser.id,
+      name: currentUser.name,
+      isLocal: true,
+      isInCall: true,
+      isPresentInSdk: true,
+      hasAudioTrack: Boolean(localTrack?.mediaStreamTrack),
+      isTrackSubscribed: localTrackPublished,
+      isMuted: localTrackMuted,
+      isSpeaking: localIsSpeaking,
+      signalPercent: localSignalPercent,
+      tone:
+        voiceStateRef.current === 'connecting'
+          ? 'connecting'
+          : localTrackMuted
+            ? 'muted'
+            : !localTrackPublished
+              ? 'missing-track'
+              : localIsSpeaking
+                ? 'speaking'
+                : localSignalPercent > 0
+                  ? 'calm'
+                  : 'no-signal',
+      statusLabel:
+        voiceStateRef.current === 'connecting'
+          ? 'подключаюсь'
+          : localTrackMuted
+            ? 'микрофон выключен'
+            : !localTrackPublished
+              ? 'трек ещё не опубликован'
+              : localIsSpeaking
+                ? 'говоришь'
+                : localSignalPercent > 0
+                  ? 'в звонке'
+                  : 'сигнал 0%',
+      detailLabel:
+        !localTrack?.mediaStreamTrack
+          ? 'Браузер не создал локальный аудиотрек.'
+          : localTrackMuted
+            ? 'Локальный трек опубликован, но микрофон сейчас выключен.'
+            : localTrackPublished
+              ? localSignalPercent > 0
+                ? `Локальный микрофон даёт сигнал ${localSignalPercent}%.`
+                : 'Локальный трек опубликован, но входной сигнал сейчас 0%.'
+              : 'Микрофон захвачен, но публикация аудио ещё не завершилась.'
+    });
+
+    for (const speaker of currentRoom?.speakers || []) {
+      if (speaker.id === currentUser.id || visibleIds.has(speaker.id)) {
+        continue;
+      }
+
+      const participant = remoteParticipantById.get(speaker.id) || null;
+      const publication = getMicrophonePublication(participant);
+      const hasAudioTrack = Boolean(publication?.trackSid || publication?.track);
+      const isTrackSubscribed = Boolean(publication?.isSubscribed || publication?.track);
+      const isMuted = Boolean(publication?.isMuted || participant?.isMicrophoneEnabled === false);
+      const signalPercent = clampSignalPercent(Number(participant?.audioLevel || 0) * 160);
+      const detectedSpeaking =
+        !isMuted &&
+        (Boolean(participant?.isSpeaking) || activeSpeakerIds.has(speaker.id) || signalPercent >= REMOTE_SPEAKING_THRESHOLD);
+
+      if (detectedSpeaking) {
+        remoteSpeakingSeenAtRef.current.set(speaker.id, now);
+      }
+
+      const isSpeaking =
+        !isMuted &&
+        (detectedSpeaking || hasRecentRemoteSpeakingSignal(speaker.id, remoteSpeakingSeenAtRef.current, now));
+
+      if (publication) {
+        nextDiagnostics.remoteAudioTrackCount += 1;
+      }
+
+      if (isTrackSubscribed) {
+        nextDiagnostics.remoteSubscribedTrackCount += 1;
+      }
+
+      visibleIds.add(speaker.id);
+      nextParticipants.push({
+        id: speaker.id,
+        name: speaker.name,
+        isLocal: false,
+        isInCall: true,
+        isPresentInSdk: Boolean(participant),
+        hasAudioTrack,
+        isTrackSubscribed,
+        isMuted,
+        isSpeaking,
+        signalPercent,
+        tone: isMuted ? 'muted' : isSpeaking ? 'speaking' : !participant || !hasAudioTrack ? 'missing-track' : signalPercent > 0 ? 'calm' : 'no-signal',
+        statusLabel: isMuted ? 'микрофон выключен' : isSpeaking ? 'говорит' : !participant ? 'в звонке без SDK-сигнала' : !hasAudioTrack ? 'нет аудиотрека' : signalPercent > 0 ? 'в звонке' : 'сигнал 0%',
+        detailLabel: !participant
+          ? 'API показывает участника в звонке, но LiveKit ещё не отдал remote participant.'
+          : !hasAudioTrack
+            ? 'Участник в звонке, но его аудиотрек ещё не опубликован.'
+            : !isTrackSubscribed
+              ? 'Аудиотрек есть, но текущий клиент ещё не подписался на него.'
+              : isMuted
+                ? 'Удалённый участник подключён, но его микрофон выключен.'
+                : isSpeaking && signalPercent === 0
+                  ? 'Удалённый участник недавно говорил; жду следующий срез входящего уровня.'
+                : signalPercent > 0
+                  ? `Входящий сигнал сейчас ${signalPercent}%.`
+                  : 'Входящий аудиотрек получен, но уровень сейчас 0%.'
+      });
+    }
+
+    for (const participant of sdkRemoteParticipants) {
+      const participantId = participant.identity || participant.sid;
+
+      if (!participantId || visibleIds.has(participantId)) {
+        continue;
+      }
+
+      const publication = getMicrophonePublication(participant);
+      const hasAudioTrack = Boolean(publication?.trackSid || publication?.track);
+      const isTrackSubscribed = Boolean(publication?.isSubscribed || publication?.track);
+      const isMuted = Boolean(publication?.isMuted || participant?.isMicrophoneEnabled === false);
+      const signalPercent = clampSignalPercent(Number(participant?.audioLevel || 0) * 160);
+      const detectedSpeaking =
+        !isMuted &&
+        (Boolean(participant?.isSpeaking) || activeSpeakerIds.has(participantId) || signalPercent >= REMOTE_SPEAKING_THRESHOLD);
+
+      if (detectedSpeaking) {
+        remoteSpeakingSeenAtRef.current.set(participantId, now);
+      }
+
+      const isSpeaking =
+        !isMuted &&
+        (detectedSpeaking || hasRecentRemoteSpeakingSignal(participantId, remoteSpeakingSeenAtRef.current, now));
+
+      if (publication) {
+        nextDiagnostics.remoteAudioTrackCount += 1;
+      }
+
+      if (isTrackSubscribed) {
+        nextDiagnostics.remoteSubscribedTrackCount += 1;
+      }
+
+      nextParticipants.push({
+        id: participantId,
+        name: participant.name || participant.identity || 'Участник',
+        isLocal: false,
+        isInCall: true,
+        isPresentInSdk: true,
+        hasAudioTrack,
+        isTrackSubscribed,
+        isMuted,
+        isSpeaking,
+        signalPercent,
+        tone: isMuted ? 'muted' : isSpeaking ? 'speaking' : !hasAudioTrack ? 'missing-track' : signalPercent > 0 ? 'calm' : 'no-signal',
+        statusLabel: isMuted ? 'микрофон выключен' : isSpeaking ? 'говорит' : !hasAudioTrack ? 'нет аудиотрека' : signalPercent > 0 ? 'в звонке' : 'сигнал 0%',
+        detailLabel: !hasAudioTrack
+          ? 'LiveKit видит участника, но микрофонный трек ещё не опубликован.'
+          : !isTrackSubscribed
+            ? 'Трек есть, но текущий клиент ещё не подписался на него.'
+            : isSpeaking && signalPercent === 0
+              ? 'Удалённый участник недавно говорил; жду следующий срез входящего уровня.'
+            : signalPercent > 0
+              ? `Входящий сигнал сейчас ${signalPercent}%.`
+              : 'Входящий аудиотрек получен, но уровень сейчас 0%.'
+      });
+    }
+
+    nextDiagnostics.activeSpeakerNames = nextParticipants
+      .filter((participant) => participant.isSpeaking)
+      .map((participant) => participant.name);
+
+    nextParticipants.sort((left, right) => {
+      if (left.isLocal && !right.isLocal) {
+        return -1;
+      }
+
+      if (!left.isLocal && right.isLocal) {
+        return 1;
+      }
+
+      if (left.isSpeaking && !right.isSpeaking) {
+        return -1;
+      }
+
+      if (!left.isSpeaking && right.isSpeaking) {
+        return 1;
+      }
+
+      return left.name.localeCompare(right.name, 'ru');
+    });
+
+    setVoiceParticipants(nextParticipants);
+    setVoiceDiagnostics((currentDiagnostics) => ({
+      ...currentDiagnostics,
+      ...nextDiagnostics
+    }));
+    setIsVoiceMuted(localTrackMuted);
+  }
+
+  function startVoiceDiagnosticsPolling(connection: any) {
+    stopVoiceDiagnosticsPolling();
+    syncVoiceDiagnostics(connection);
+    voiceDiagnosticsIntervalRef.current = window.setInterval(() => {
+      syncVoiceDiagnostics(connection);
+    }, VOICE_DIAGNOSTICS_POLL_INTERVAL_MS);
+  }
 
   async function refreshRoomSnapshot() {
     if (!roomId) {
@@ -424,6 +1012,9 @@ export default function RoomPage() {
 
     liveRoomRef.current = null;
     localAudioTrackRef.current = null;
+    stopVoiceDiagnosticsPolling();
+    stopLocalMicMeter();
+    detachAllRemoteAudioTracks();
 
     if (currentTrack?.stop) {
       currentTrack.stop();
@@ -443,6 +1034,12 @@ export default function RoomPage() {
 
     setVoiceState(nextState);
     setVoiceError(nextError);
+    setVoiceParticipants(buildFallbackVoiceParticipants(roomRef.current, userRef.current, nextState));
+    setVoiceDiagnostics((currentDiagnostics) => ({
+      ...createInitialVoiceDiagnostics(),
+      wsUrl: currentDiagnostics.wsUrl
+    }));
+    setIsVoiceMuted(false);
     await refreshRoomSnapshot();
     voiceTeardownRef.current = false;
   }
@@ -454,6 +1051,7 @@ export default function RoomPage() {
 
     setVoiceState('connecting');
     setVoiceError('');
+    setVoiceParticipants(buildFallbackVoiceParticipants(roomRef.current, user, 'connecting'));
 
     try {
       const joinResponse = await apiClient.post(`/api/rooms/${roomId}/join`);
@@ -474,6 +1072,7 @@ export default function RoomPage() {
         adaptiveStream: true,
         dynacast: true
       });
+      const syncState = () => syncVoiceDiagnostics(connection);
 
       connection.on(liveKit.RoomEvent.Disconnected, () => {
         if (liveRoomRef.current === connection) {
@@ -481,15 +1080,65 @@ export default function RoomPage() {
         }
       });
 
+      if (liveKit.RoomEvent.TrackSubscribed) {
+        connection.on(liveKit.RoomEvent.TrackSubscribed, (track: any) => {
+          attachRemoteAudioTrack(track);
+          syncState();
+        });
+      }
+
+      if (liveKit.RoomEvent.TrackUnsubscribed) {
+        connection.on(liveKit.RoomEvent.TrackUnsubscribed, (track: any) => {
+          detachRemoteAudioTrack(track);
+          syncState();
+        });
+      }
+
+      [
+        liveKit.RoomEvent.ParticipantConnected,
+        liveKit.RoomEvent.ParticipantDisconnected,
+        liveKit.RoomEvent.ActiveSpeakersChanged,
+        liveKit.RoomEvent.LocalTrackPublished,
+        liveKit.RoomEvent.LocalTrackUnpublished,
+        liveKit.RoomEvent.ConnectionStateChanged,
+        liveKit.RoomEvent.TrackMuted,
+        liveKit.RoomEvent.TrackUnmuted
+      ]
+        .filter(Boolean)
+        .forEach((eventName) => {
+          connection.on(eventName, syncState);
+        });
+
       const localAudioTrack = await liveKit.createLocalAudioTrack();
 
       await connection.connect(voiceAccess.wsUrl, voiceAccess.token);
       await connection.localParticipant.publishTrack(localAudioTrack);
 
+      const existingRemoteParticipants: any[] = connection?.remoteParticipants?.values
+        ? Array.from<any>(connection.remoteParticipants.values())
+        : [];
+
+      existingRemoteParticipants.forEach((participant: any) => {
+        getParticipantTrackPublications(participant).forEach((publication: any) => {
+          if (publication?.track?.kind === 'audio') {
+            attachRemoteAudioTrack(publication.track);
+          }
+        });
+      });
+
       liveRoomRef.current = connection;
       localAudioTrackRef.current = localAudioTrack;
+      startLocalMicMeter(localAudioTrack);
+      startVoiceDiagnosticsPolling(connection);
+      voiceWsUrlRef.current = voiceAccess.wsUrl;
+      setVoiceDiagnostics((currentDiagnostics) => ({
+        ...currentDiagnostics,
+        wsUrl: voiceAccess.wsUrl
+      }));
+      setIsVoiceMuted(Boolean(localAudioTrack?.isMuted));
       setVoiceState('connected');
       setVoiceError('');
+      syncState();
       await refreshRoomSnapshot();
     } catch (error: any) {
       const nextError = getVoiceErrorMessage(error);
@@ -503,6 +1152,28 @@ export default function RoomPage() {
 
   async function handleLeaveVoice() {
     await cleanupVoiceConnection();
+  }
+
+  async function handleToggleVoiceMute() {
+    const localAudioTrack = localAudioTrackRef.current;
+
+    if (!localAudioTrack) {
+      return;
+    }
+
+    try {
+      if (localAudioTrack.isMuted) {
+        await localAudioTrack.unmute();
+        setIsVoiceMuted(false);
+      } else {
+        await localAudioTrack.mute();
+        setIsVoiceMuted(true);
+      }
+
+      syncVoiceDiagnostics();
+    } catch (muteError) {
+      console.error('Failed to toggle microphone mute state:', muteError);
+    }
   }
 
   async function handleCreateInvite() {
@@ -672,9 +1343,14 @@ export default function RoomPage() {
                 </div>
                 <div className="room-voice-actions">
                   {voiceState === 'connected' ? (
-                    <button className="button button-secondary" type="button" onClick={handleLeaveVoice}>
-                      Покинуть звонок
-                    </button>
+                    <>
+                      <button className="button button-secondary" type="button" onClick={handleToggleVoiceMute}>
+                        {isVoiceMuted ? 'Включить микрофон' : 'Выключить микрофон'}
+                      </button>
+                      <button className="button button-secondary" type="button" onClick={handleLeaveVoice}>
+                        Покинуть звонок
+                      </button>
+                    </>
                   ) : (
                     <button className="button" type="button" onClick={handleJoinVoice} disabled={voiceState === 'connecting'}>
                       {voiceState === 'connecting' ? 'Подключаю...' : 'Присоединиться к звонку'}
@@ -682,6 +1358,82 @@ export default function RoomPage() {
                   )}
                 </div>
               </section>
+
+              <section className="voice-diagnostics-card">
+                <div className="voice-diagnostics-grid">
+                  <article className="voice-diagnostics-item">
+                    <strong>Твой микрофон</strong>
+                    <span>
+                      {!voiceDiagnostics.localTrackCreated
+                        ? 'локальный трек ещё не создан'
+                        : voiceDiagnostics.localTrackMuted
+                          ? 'трек есть, но микрофон выключен'
+                          : voiceDiagnostics.localTrackPublished
+                            ? `сигнал ${voiceDiagnostics.localSignalPercent}%`
+                            : 'трек создан, но ещё не опубликован'}
+                    </span>
+                  </article>
+                  <article className="voice-diagnostics-item">
+                    <strong>Удалённые аудиотреки</strong>
+                    <span>
+                      {voiceDiagnostics.remoteSubscribedTrackCount} из {voiceDiagnostics.remoteAudioTrackCount} получены в клиенте
+                    </span>
+                  </article>
+                  <article className="voice-diagnostics-item">
+                    <strong>Воспроизведение</strong>
+                    <span>
+                      {voiceDiagnostics.playingAudioElements} из {voiceDiagnostics.attachedAudioElements} audio-элемент(ов)
+                      воспроизводят звук
+                    </span>
+                  </article>
+                  <article className="voice-diagnostics-item">
+                    <strong>Сейчас говорит</strong>
+                    <span>{voiceActiveSpeakersText}</span>
+                  </article>
+                </div>
+                {voiceDiagnostics.wsUrl ? (
+                  <div className="voice-diagnostics-footnote">
+                    LiveKit endpoint: {voiceDiagnostics.wsUrl}
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="voice-participants-card">
+                <div className="voice-participants-header">
+                  <h3>Активность участников</h3>
+                  <span>
+                    Спокойный круг означает “в звонке”, пульсирующий показывает речь, muted и отсутствие сигнала видны отдельно.
+                  </span>
+                </div>
+                <div className="voice-participants-list">
+                  {displayedVoiceParticipants.length > 0 ? (
+                    displayedVoiceParticipants.map((participant) => (
+                      <article key={participant.id} className="voice-participant-row">
+                        <div className={`voice-avatar voice-avatar-${participant.tone}`}>
+                          <span>{participant.name.slice(0, 1).toUpperCase()}</span>
+                        </div>
+                        <div className="voice-participant-copy">
+                          <div className="voice-participant-topline">
+                            <strong>
+                              {participant.name}
+                              {participant.isLocal ? ' · ты' : ''}
+                            </strong>
+                            <span className={`voice-state-badge voice-state-badge-${participant.tone}`}>{participant.statusLabel}</span>
+                          </div>
+                          <p>{participant.detailLabel}</p>
+                          <div className="voice-signal-rail" aria-hidden="true">
+                            <span style={{ width: `${Math.max(6, participant.signalPercent)}%` }} />
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="empty">После входа в звонок здесь появятся участники и их аудиосостояние.</p>
+                  )}
+                </div>
+              </section>
+
+              <div ref={remoteAudioMountRef} aria-hidden="true" className="voice-audio-mount" />
 
               <div className="message-list">
                 {messagesState === 'loading' ? (
