@@ -1,0 +1,1 @@
+{"c":["webpack"],"r":["pages/friends","pages/events"],"m":["./node_modules/next/dist/build/webpack/loaders/next-client-pages-loader.js?absolutePagePath=%2Fapp%2Fpages%2Ffriends.tsx&page=%2Ffriends!","./pages/friends.tsx","./node_modules/next/dist/build/webpack/loaders/next-client-pages-loader.js?absolutePagePath=%2Fapp%2Fpages%2Fevents.tsx&page=%2Fevents!","./pages/events.tsx"]}

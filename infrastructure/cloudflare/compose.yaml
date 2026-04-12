@@ -1,0 +1,17 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: mashenin-cloudflared
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - tunnel
+      - --metrics
+      - ${TUNNEL_METRICS:-0.0.0.0:2000}
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARE_TUNNEL_TOKEN}
+    profiles:
+      - tunnel

@@ -1,0 +1,53 @@
+{
+  "config": {
+    "ingress": [
+      {
+        "hostname": "mashenin.site",
+        "path": "^/(?:health|api(?:/.*)?)$",
+        "service": "http://host.docker.internal:4000",
+        "originRequest": {
+          "httpHostHeader": "mashenin.site"
+        }
+      },
+      {
+        "hostname": "www.mashenin.site",
+        "path": "^/(?:health|api(?:/.*)?)$",
+        "service": "http://host.docker.internal:4000",
+        "originRequest": {
+          "httpHostHeader": "www.mashenin.site"
+        }
+      },
+      {
+        "hostname": "mashenin.site",
+        "service": "http://host.docker.internal:3001",
+        "originRequest": {
+          "httpHostHeader": "mashenin.site"
+        }
+      },
+      {
+        "hostname": "www.mashenin.site",
+        "service": "http://host.docker.internal:3001",
+        "originRequest": {
+          "httpHostHeader": "www.mashenin.site"
+        }
+      },
+      {
+        "hostname": "api.mashenin.site",
+        "service": "http://host.docker.internal:4000",
+        "originRequest": {
+          "httpHostHeader": "api.mashenin.site"
+        }
+      },
+      {
+        "hostname": "rtc.mashenin.site",
+        "service": "http://host.docker.internal:7880",
+        "originRequest": {
+          "httpHostHeader": "rtc.mashenin.site"
+        }
+      },
+      {
+        "service": "http_status:404"
+      }
+    ]
+  }
+}

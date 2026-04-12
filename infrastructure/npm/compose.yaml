@@ -1,0 +1,49 @@
+services:
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: mashenin-npm
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    environment:
+      TZ: ${TZ:-Asia/Yekaterinburg}
+      DISABLE_IPV6: ${DISABLE_IPV6:-true}
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - npm_public
+
+  duckdns:
+    build:
+      context: .
+      dockerfile: Dockerfile.duckdns
+    container_name: mashenin-duckdns
+    profiles:
+      - duckdns
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Yekaterinburg}
+      DUCKDNS_SUBDOMAINS: ${DUCKDNS_SUBDOMAINS:-}
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN:-}
+      DUCKDNS_PUBLISH_IP: ${DUCKDNS_PUBLISH_IP:-}
+      DUCKDNS_PUBLISH_IP_FILE: ${DUCKDNS_PUBLISH_IP_FILE:-/state/public-ip.txt}
+      DUCKDNS_INTERVAL_SECONDS: ${DUCKDNS_INTERVAL_SECONDS:-300}
+    volumes:
+      - ./state:/state
+    networks:
+      - npm_public
+
+networks:
+  npm_public:
+    name: mashenin_npm_public
+
+volumes:
+  npm_data:
+    name: mashenin_npm_data
+  npm_letsencrypt:
+    name: mashenin_npm_letsencrypt

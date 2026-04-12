@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../../components/layout/Header';
-import { createApiClient } from '../../lib/api';
+import { createApiClient, getSessionToken } from '../../lib/api';
 import { useAuthRoute } from '../../lib/session';
 
 interface RoomMessage {
@@ -18,12 +18,18 @@ interface RoomSpeaker {
   note: string;
 }
 
+interface RoomParticipant {
+  id: string;
+  name: string;
+}
+
 interface Room {
   id: string;
   name: string;
   topic: string;
   kind: string;
   members: number;
+  participants: RoomParticipant[];
   speakers: RoomSpeaker[];
 }
 
@@ -165,6 +171,29 @@ function getVoiceErrorMessage(error: any) {
 async function loadLiveKitClient(): Promise<LiveKitModule> {
   const dynamicImport = new Function('specifier', 'return import(specifier);') as (specifier: string) => Promise<LiveKitModule>;
   return dynamicImport(LIVEKIT_CLIENT_URL);
+}
+
+function notifyVoiceLeaveOnUnload(roomId: string) {
+  const sessionToken = getSessionToken();
+
+  if (!roomId || !sessionToken) {
+    return;
+  }
+
+  void apiClient
+    .apiFetch(
+      `/api/rooms/${roomId}/leave`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+        keepalive: true,
+      },
+      sessionToken
+    )
+    .catch(() => {});
 }
 
 function clampSignalPercent(value: number) {
@@ -334,6 +363,34 @@ export default function RoomPage() {
   const voiceActiveSpeakersText = voiceDiagnostics.activeSpeakerNames.length
     ? voiceDiagnostics.activeSpeakerNames.join(', ')
     : 'пока никто не говорит';
+  const roomParticipants = room?.participants || [];
+  const directCompanions = roomParticipants.filter((participant) => participant.id !== user?.id);
+  const directCompanionNames = directCompanions.map((participant) => participant.name).join(', ');
+  const directContextLabel = room?.kind === 'direct' && directCompanionNames ? `Разговор с ${directCompanionNames}` : '';
+  const conversationTopicText =
+    room?.kind === 'direct' && directCompanionNames
+      ? `${directContextLabel}. ${room.topic || 'Личный разговор без лишней настройки.'}`
+      : room?.topic || 'Открой этот разговор и продолжи общение.';
+  const emptyStatePresenceLabel =
+    room?.kind === 'direct' && directCompanionNames
+      ? `${directCompanionNames} уже ${directCompanions.length > 1 ? 'в этой комнате' : 'в этой комнате'}`
+      : 'Кто-то уже вошел в комнату.';
+  const emptyStatePresenceHint =
+    room?.kind === 'direct' && directCompanionNames
+      ? `Собеседник ${directCompanionNames} уже может открыть этот разговор. Можно писать сразу сюда.`
+      : 'Ты уже не один в разговоре. Можно написать первое сообщение.';
+  const inviteCardTitle =
+    hasJoinedCompanion && room?.kind === 'direct' && directCompanionNames
+      ? `${directCompanionNames} уже в комнате`
+      : hasJoinedCompanion
+        ? 'Человек уже в комнате'
+        : 'Пригласи первого человека';
+  const inviteCardCopy =
+    hasJoinedCompanion && room?.kind === 'direct' && directCompanionNames
+      ? `${directCompanionNames} уже может открыть разговор. Теперь самый естественный следующий шаг — написать первое сообщение.`
+      : hasJoinedCompanion
+        ? 'Собеседник уже может открыть разговор. Теперь самый естественный следующий шаг — написать первое сообщение.'
+        : 'Подготовь ссылку на эту комнату и отправь ее тому, с кем хочешь начать разговор.';
 
   useEffect(() => {
     roomRef.current = room;
@@ -577,8 +634,30 @@ export default function RoomPage() {
       }
 
       if (roomId) {
-        void apiClient.post(`/api/rooms/${roomId}/leave`).catch(() => {});
+        notifyVoiceLeaveOnUnload(roomId);
       }
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId) {
+      return;
+    }
+
+    const handlePageHide = () => {
+      if (voiceStateRef.current !== 'connected' && !liveRoomRef.current && !localAudioTrackRef.current) {
+        return;
+      }
+
+      notifyVoiceLeaveOnUnload(roomId);
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('beforeunload', handlePageHide);
+
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handlePageHide);
     };
   }, [roomId]);
 
@@ -1311,9 +1390,12 @@ export default function RoomPage() {
                   </div>
                   <h1>{room.name}</h1>
                   <p className="conversation-topic">
-                    {room.topic || 'Открой этот разговор и продолжи общение.'}
+                    {conversationTopicText}
                   </p>
-                  <div className="conversation-meta">{formatMembersLabel(room.members)}</div>
+                  <div className="conversation-meta">
+                    {formatMembersLabel(room.members)}
+                    {directContextLabel ? ` · ${directContextLabel}` : ''}
+                  </div>
                 </div>
               </div>
 
@@ -1455,18 +1537,14 @@ export default function RoomPage() {
                     <p>Напиши первое сообщение или пригласи человека, чтобы разговор в этой комнате наконец начался.</p>
                     {hasJoinedCompanion ? (
                       <div className="room-social-signal">
-                        <strong>Кто-то уже вошел в комнату.</strong>
-                        <span>Ты уже не один в разговоре. Можно написать первое сообщение.</span>
+                        <strong>{emptyStatePresenceLabel}</strong>
+                        <span>{emptyStatePresenceHint}</span>
                       </div>
                     ) : null}
                     <div className="empty-conversation-invite">
                       <div className="empty-conversation-invite-copy">
-                        <h3>{hasJoinedCompanion ? 'Человек уже в комнате' : 'Пригласи первого человека'}</h3>
-                        <p>
-                          {hasJoinedCompanion
-                            ? 'Собеседник уже может открыть разговор. Теперь самый естественный следующий шаг — написать первое сообщение.'
-                            : 'Подготовь ссылку на эту комнату и отправь ее тому, с кем хочешь начать разговор.'}
-                        </p>
+                        <h3>{inviteCardTitle}</h3>
+                        <p>{inviteCardCopy}</p>
                       </div>
 
                       {inviteCreateState === 'ready' && inviteLink ? (
