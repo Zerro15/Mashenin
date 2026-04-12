@@ -150,7 +150,7 @@ export default function InvitePage() {
     return () => {
       isActive = false;
     };
-  }, [acceptState, invite, isChecking, router, user]);
+  }, [invite, isChecking, router, user]);
 
   const loginPath = `/login?next=${encodeURIComponent(nextPath)}`;
   const registerPath = `/register?next=${encodeURIComponent(nextPath)}`;
