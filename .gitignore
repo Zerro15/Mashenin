@@ -6,6 +6,8 @@ dist/
 build/
 .next/
 .next_backup/
+.next_stale_*/
+.qwen/
 coverage/
 *.log
 *.tsbuildinfo
@@ -18,3 +20,14 @@ apps/api/data/*.json
 
 postgres-data/
 redis-data/
+
+# Infra generated files
+infra/TURN/
+infrastructure/cloudflare/credentials/
+
+# Browser test harness temp files
+/tmp/browser-*.mjs
+/tmp/pub-browser-test.mjs
+/tmp/error-session-test.mjs
+/tmp/polling-session-test.mjs
+/tmp/stale-auth-fix-test.mjs
