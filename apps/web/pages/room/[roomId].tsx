@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../../components/layout/Header';
-import { createApiClient, getSessionToken } from '../../lib/api';
+import { createApiClient, getSessionToken, clearSessionToken } from '../../lib/api';
 import { useAuthRoute } from '../../lib/session';
 
 interface RoomMessage {
@@ -543,6 +543,29 @@ export default function RoomPage() {
 
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return;
+      }
+
+      // Check if session is still valid before polling
+      try {
+        const sessionResponse = await apiClient.get('/api/auth/me');
+        if (!sessionResponse.data?.ok || !sessionResponse.data?.user) {
+          if (!isActive) return;
+          clearSessionToken();
+          const currentPath = typeof window !== 'undefined' ? window.location.pathname : `/room/${room.id}`;
+          const nextParam = encodeURIComponent(currentPath);
+          router.replace(`/login?next=${nextParam}`);
+          return;
+        }
+      } catch (sessionError: any) {
+        if (!isActive) return;
+        if (sessionError?.response?.status === 401) {
+          clearSessionToken();
+          const currentPath = typeof window !== 'undefined' ? window.location.pathname : `/room/${room.id}`;
+          const nextParam = encodeURIComponent(currentPath);
+          router.replace(`/login?next=${nextParam}`);
+          return;
+        }
+        // Non-401 errors are silently ignored for polling resilience
       }
 
       isRefreshing = true;
