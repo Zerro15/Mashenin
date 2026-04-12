@@ -37,7 +37,15 @@ export function useAuthRoute(mode: AuthMode, options: UseAuthRouteOptions = {}):
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const guestRedirectTo = getSafeLocalPath(options.guestRedirectTo, '/rooms');
-  const protectedRedirectTo = `/login?next=${encodeURIComponent(getSafeLocalPath(router.asPath, '/rooms'))}`;
+
+  function getCurrentPath(): string {
+    if (typeof window !== 'undefined' && window.location.pathname) {
+      return window.location.pathname;
+    }
+    return getSafeLocalPath(router.asPath, '/rooms');
+  }
+
+  const protectedRedirectTo = `/login?next=${encodeURIComponent(getCurrentPath())}`;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
