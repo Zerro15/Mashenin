@@ -1,24 +1,86 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../../components/layout/Header';
 import { createApiClient } from '../../lib/api';
 import { useAuthRoute } from '../../lib/session';
 
 type CreateRoomSubmitState = 'idle' | 'submitting' | 'success' | 'error';
+type DirectOpenState = 'idle' | 'opening' | 'error';
 
 const apiClient = createApiClient();
 
 export default function CreateRoomPage() {
   const router = useRouter();
   const { user, isChecking, logout } = useAuthRoute('protected');
+  const peerUserId = typeof router.query.peerUserId === 'string' ? router.query.peerUserId.trim() : '';
+  const peerName = typeof router.query.peerName === 'string' ? router.query.peerName.trim() : '';
+  const isDirectMode = Boolean(peerUserId);
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [submitState, setSubmitState] = useState<CreateRoomSubmitState>('idle');
   const [submitError, setSubmitError] = useState('');
+  const [directState, setDirectState] = useState<DirectOpenState>('idle');
+  const [directError, setDirectError] = useState('');
 
   const isSubmitting = submitState === 'submitting';
   const isRedirecting = submitState === 'success';
-  const isFormLocked = isChecking || isSubmitting || isRedirecting;
+  const isOpeningDirect = directState === 'opening';
+  const isFormLocked = isChecking || isSubmitting || isRedirecting || isOpeningDirect;
+
+  useEffect(() => {
+    if (!router.isReady || !isDirectMode || isChecking || !user || directState !== 'idle') {
+      return;
+    }
+
+    let isActive = true;
+
+    async function openDirectRoom() {
+      setDirectState('opening');
+      setDirectError('');
+
+      try {
+        const response = await apiClient.post('/api/rooms/direct', {
+          peerUserId
+        });
+
+        if (!isActive) {
+          return;
+        }
+
+        if (!response.data?.ok || !response.data?.room?.id) {
+          setDirectState('error');
+          setDirectError('Не удалось открыть direct room.');
+          return;
+        }
+
+        const nextSearch = response.data.created ? '?direct=1&created=1' : '?direct=1';
+        window.location.assign(`/room/${response.data.room.id}${nextSearch}`);
+      } catch (openError: any) {
+        if (!isActive) {
+          return;
+        }
+
+        const apiError = openError?.response?.data?.error;
+        const nextError =
+          apiError === 'user_not_found'
+            ? 'Не удалось найти этого пользователя.'
+            : apiError === 'self_direct_not_allowed'
+              ? 'Нельзя открыть direct room с самим собой.'
+              : apiError === 'unauthorized'
+                ? 'Сессия истекла. Войди снова.'
+                : 'Не удалось открыть direct room.';
+
+        setDirectState('error');
+        setDirectError(nextError);
+      }
+    }
+
+    openDirectRoom();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isChecking, isDirectMode, peerUserId, router, user]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,6 +132,28 @@ export default function CreateRoomPage() {
       <main className="main auth-page">
         {isChecking ? (
           <p className="empty">Проверка сессии...</p>
+        ) : isDirectMode ? (
+          <section className="status-card create-room-card">
+            <h1>Открываю direct room</h1>
+            <p>
+              {peerName
+                ? `Проверяю, есть ли уже разговор с ${peerName}, и открываю ту же комнату без дублей.`
+                : 'Проверяю, есть ли уже direct room, и открываю её без дублей.'}
+            </p>
+
+            {directState === 'error' ? (
+              <>
+                <p className="form-error">{directError}</p>
+                <div className="form-actions">
+                  <a className="button button-secondary" href="/rooms">
+                    К комнатам
+                  </a>
+                </div>
+              </>
+            ) : (
+              <p>{peerName ? `Сейчас открою общий разговор с ${peerName}.` : 'Сейчас открою общий разговор.'}</p>
+            )}
+          </section>
         ) : (
           <section className="auth-card create-room-card">
             <div className="create-room-intro">

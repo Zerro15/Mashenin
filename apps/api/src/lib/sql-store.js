@@ -212,7 +212,8 @@ export async function getEvents() {
 
 export async function getRoomById(roomId) {
   const pool = getPool();
-  const roomResult = await pool.query(
+  const [roomResult, speakersResult, participantsResult] = await Promise.all([
+    pool.query(
     `
       SELECT
         r.id,
@@ -227,7 +228,36 @@ export async function getRoomById(roomId) {
       GROUP BY r.id
     `,
     [roomId]
-  );
+    ),
+    pool.query(
+      `
+        SELECT
+          u.id,
+          u.display_name,
+          u.presence,
+          u.status_note
+        FROM voice_sessions vs
+        JOIN users u ON u.id = vs.user_id
+        JOIN rooms r ON r.id = vs.room_id
+        WHERE r.slug = $1 AND vs.ended_at IS NULL
+        ORDER BY vs.started_at ASC
+      `,
+      [roomId]
+    ),
+    pool.query(
+      `
+        SELECT
+          u.id,
+          u.display_name
+        FROM room_memberships rm
+        JOIN rooms r ON r.id = rm.room_id
+        JOIN users u ON u.id = rm.user_id
+        WHERE r.slug = $1
+        ORDER BY lower(u.display_name) ASC
+      `,
+      [roomId]
+    )
+  ]);
 
   const room = roomResult.rows[0];
 
@@ -235,28 +265,16 @@ export async function getRoomById(roomId) {
     return null;
   }
 
-  const speakersResult = await pool.query(
-    `
-      SELECT
-        u.id,
-        u.display_name,
-        u.presence,
-        u.status_note
-      FROM voice_sessions vs
-      JOIN users u ON u.id = vs.user_id
-      JOIN rooms r ON r.id = vs.room_id
-      WHERE r.slug = $1 AND vs.ended_at IS NULL
-      ORDER BY vs.started_at ASC
-    `,
-    [roomId]
-  );
-
   return {
     id: room.slug,
     name: room.name,
     kind: room.kind,
     topic: room.topic,
     members: room.members,
+    participants: participantsResult.rows.map((row) => ({
+      id: row.id,
+      name: row.display_name
+    })),
     speakers: speakersResult.rows.map((row) => ({
       id: row.id,
       name: row.display_name,

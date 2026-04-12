@@ -199,6 +199,18 @@ function getRoomMembershipCount(state, roomId) {
   return (state.roomMemberships || []).filter((membership) => membership.roomId === roomId).length;
 }
 
+function getRoomParticipants(state, roomId) {
+  return (state.roomMemberships || [])
+    .filter((membership) => membership.roomId === roomId)
+    .map((membership) => state.users.find((user) => user.id === membership.userId) || null)
+    .filter(Boolean)
+    .map((user) => ({
+      id: user.id,
+      name: user.name
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, 'ru', { sensitivity: 'base' }));
+}
+
 function findExistingDirectRoom(state, userId, peerUserId) {
   return (
     (state.rooms || []).find((room) => {
@@ -287,6 +299,7 @@ export async function getRoomById(roomId) {
 
   return {
     ...mapRoomSummary(state, room),
+    participants: getRoomParticipants(state, room.id),
     speakers: speakers.map(publicUser)
   };
 }
