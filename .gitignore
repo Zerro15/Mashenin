@@ -17,6 +17,7 @@ apps/web/node_modules/
 apps/api/node_modules/
 packages/shared/node_modules/
 apps/api/data/*.json
+data/*.json
 
 postgres-data/
 redis-data/
@@ -24,6 +25,10 @@ redis-data/
 # Infra generated files
 infra/TURN/
 infrastructure/cloudflare/credentials/
+
+# Accidental nested/empty dirs
+apps/web/api/
+apps/web/apps/
 
 # Browser test harness temp files
 /tmp/browser-*.mjs
