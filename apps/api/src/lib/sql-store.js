@@ -34,6 +34,22 @@ function slugifyRoomName(value) {
   return normalized || `room-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function buildDirectRoomSlug(userId, peerUserId) {
+  const pairKey = [String(userId || ""), String(peerUserId || "")].sort().join(":");
+  return `dm-${crypto.createHash("sha1").update(pairKey).digest("hex").slice(0, 12)}`;
+}
+
+function buildDirectRoomName(leftName, rightName) {
+  const names = [String(leftName || "").trim(), String(rightName || "").trim()].filter(Boolean);
+  if (names.length === 0) {
+    return "Личный разговор";
+  }
+
+  return names
+    .sort((a, b) => a.localeCompare(b, "ru", { sensitivity: "base" }))
+    .join(" и ");
+}
+
 function mapUser(row) {
   return {
     id: row.id,
@@ -1033,6 +1049,156 @@ export async function createRoom({ token, name, topic = '' }) {
     };
   } catch (error) {
     await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getOrCreateDirectRoom({ token, peerUserId }) {
+  const normalizedPeerUserId = String(peerUserId || "").trim();
+
+  if (!token) {
+    return { ok: false, error: "unauthorized" };
+  }
+
+  if (!normalizedPeerUserId) {
+    return { ok: false, error: "peer_user_required" };
+  }
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const user = await getUserBySessionToken(client, token);
+
+    if (!user) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "unauthorized" };
+    }
+
+    if (normalizedPeerUserId === user.id) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "self_direct_not_allowed" };
+    }
+
+    const peerResult = await client.query(
+      `
+        SELECT id, display_name
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [normalizedPeerUserId]
+    );
+
+    const peer = peerResult.rows[0];
+
+    if (!peer) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "user_not_found" };
+    }
+
+    const existingResult = await client.query(
+      `
+        SELECT
+          r.id,
+          r.slug,
+          r.name,
+          r.kind,
+          r.topic
+        FROM rooms r
+        JOIN room_memberships my_membership
+          ON my_membership.room_id = r.id
+         AND my_membership.user_id = $1
+        JOIN room_memberships peer_membership
+          ON peer_membership.room_id = r.id
+         AND peer_membership.user_id = $2
+        WHERE r.kind = 'direct'
+          AND r.is_archived = FALSE
+          AND 2 = (
+            SELECT COUNT(*)
+            FROM room_memberships exact_membership
+            WHERE exact_membership.room_id = r.id
+          )
+        ORDER BY r.created_at ASC
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [user.id, peer.id]
+    );
+
+    const existingRoom = existingResult.rows[0];
+
+    if (existingRoom) {
+      await client.query("COMMIT");
+      return {
+        ok: true,
+        created: false,
+        room: {
+          id: existingRoom.slug,
+          name: existingRoom.name,
+          kind: existingRoom.kind,
+          topic: existingRoom.topic,
+          members: 2
+        }
+      };
+    }
+
+    const slugBase = buildDirectRoomSlug(user.id, peer.id);
+    const existingSlug = await client.query(
+      `
+        SELECT 1
+        FROM rooms
+        WHERE slug = $1
+        LIMIT 1
+      `,
+      [slugBase]
+    );
+
+    const slug = existingSlug.rows[0]
+      ? `${slugBase}-${Math.random().toString(36).slice(2, 6)}`
+      : slugBase;
+
+    const roomResult = await client.query(
+      `
+        INSERT INTO rooms (slug, name, kind, topic, created_by_user_id)
+        VALUES ($1, $2, 'direct', $3, $4)
+        RETURNING id, slug, name, kind, topic
+      `,
+      [slug, buildDirectRoomName(user.display_name, peer.display_name), "личный разговор", user.id]
+    );
+
+    const room = roomResult.rows[0];
+
+    await client.query(
+      `
+        INSERT INTO room_memberships (room_id, user_id, role)
+        VALUES
+          ($1, $2, 'owner'),
+          ($1, $3, 'member')
+        ON CONFLICT (room_id, user_id) DO NOTHING
+      `,
+      [room.id, user.id, peer.id]
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      ok: true,
+      created: true,
+      room: {
+        id: room.slug,
+        name: room.name,
+        kind: room.kind,
+        topic: room.topic,
+        members: 2
+      }
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();

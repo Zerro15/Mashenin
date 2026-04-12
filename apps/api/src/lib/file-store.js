@@ -164,6 +164,22 @@ function buildInviteCode() {
   return crypto.randomBytes(4).toString("hex");
 }
 
+function buildDirectRoomSlug(userId, peerUserId) {
+  const pairKey = [String(userId || ""), String(peerUserId || "")].sort().join(":");
+  return `dm-${crypto.createHash("sha1").update(pairKey).digest("hex").slice(0, 12)}`;
+}
+
+function buildDirectRoomName(leftName, rightName) {
+  const names = [String(leftName || "").trim(), String(rightName || "").trim()].filter(Boolean);
+  if (names.length === 0) {
+    return "Личный разговор";
+  }
+
+  return names
+    .sort((a, b) => a.localeCompare(b, "ru", { sensitivity: "base" }))
+    .join(" и ");
+}
+
 function findRoomRecord(state, roomId) {
   return state.rooms.find((entry) => entry.id === roomId || entry.slug === roomId) || null;
 }
@@ -181,6 +197,22 @@ function isRoomInviteActive(invite) {
 
 function getRoomMembershipCount(state, roomId) {
   return (state.roomMemberships || []).filter((membership) => membership.roomId === roomId).length;
+}
+
+function findExistingDirectRoom(state, userId, peerUserId) {
+  return (
+    (state.rooms || []).find((room) => {
+      if (room.kind !== "direct") {
+        return false;
+      }
+
+      const memberIds = (state.roomMemberships || [])
+        .filter((membership) => membership.roomId === room.id)
+        .map((membership) => membership.userId);
+
+      return memberIds.length === 2 && memberIds.includes(userId) && memberIds.includes(peerUserId);
+    }) || null
+  );
 }
 
 function getSessionUserId(state, token) {
@@ -471,6 +503,87 @@ export async function createRoom({ token, name, topic = '' }) {
   });
 
   return createdRoom;
+}
+
+export async function getOrCreateDirectRoom({ token, peerUserId }) {
+  const normalizedPeerUserId = String(peerUserId || "").trim();
+  let result = { ok: false, error: "direct_room_open_failed" };
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+
+    if (!user) {
+      result = { ok: false, error: "unauthorized" };
+      return state;
+    }
+
+    if (!normalizedPeerUserId) {
+      result = { ok: false, error: "peer_user_required" };
+      return state;
+    }
+
+    if (normalizedPeerUserId === user.id) {
+      result = { ok: false, error: "self_direct_not_allowed" };
+      return state;
+    }
+
+    const peer = state.users.find((entry) => entry.id === normalizedPeerUserId);
+
+    if (!peer) {
+      result = { ok: false, error: "user_not_found" };
+      return state;
+    }
+
+    const existingRoom = findExistingDirectRoom(state, user.id, peer.id);
+
+    if (existingRoom) {
+      result = {
+        ok: true,
+        created: false,
+        room: mapRoomSummary(state, existingRoom)
+      };
+      return state;
+    }
+
+    const roomIdBase = buildDirectRoomSlug(user.id, peer.id);
+    const hasSameSlug = state.rooms.some((room) => room.id === roomIdBase || room.slug === roomIdBase);
+    const roomId = hasSameSlug ? `${roomIdBase}-${Math.random().toString(36).slice(2, 6)}` : roomIdBase;
+
+    const room = {
+      id: roomId,
+      slug: roomId,
+      name: buildDirectRoomName(user.name, peer.name),
+      kind: "direct",
+      topic: "личный разговор",
+      members: 0
+    };
+
+    state.rooms.push(room);
+    state.roomMemberships = state.roomMemberships || [];
+    state.roomMemberships.push({
+      roomId,
+      userId: user.id,
+      role: "owner",
+      joinedAt: Date.now()
+    });
+    state.roomMemberships.push({
+      roomId,
+      userId: peer.id,
+      role: "member",
+      joinedAt: Date.now()
+    });
+
+    result = {
+      ok: true,
+      created: true,
+      room: mapRoomSummary(state, room)
+    };
+
+    return state;
+  });
+
+  return result;
 }
 
 export async function createRoomInvite({ token, roomId }) {

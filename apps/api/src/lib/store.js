@@ -91,6 +91,10 @@ export async function createRoom(...args) {
   return impl().createRoom?.(...args) || null;
 }
 
+export async function getOrCreateDirectRoom(...args) {
+  return impl().getOrCreateDirectRoom?.(...args) || { ok: false, error: "not_supported" };
+}
+
 export async function createRoomInvite(...args) {
   return impl().createRoomInvite?.(...args) || { ok: false, error: "not_supported" };
 }

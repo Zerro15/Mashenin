@@ -60,6 +60,47 @@ export default async function roomRoutes(fastify) {
     }
   });
 
+  fastify.post('/direct', async (request, reply) => {
+    const token = getSessionToken(request);
+    const peerUserId = String(request.body?.peerUserId || '').trim();
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    if (!peerUserId) {
+      return reply.status(400).send({ ok: false, error: 'peer_user_required' });
+    }
+
+    try {
+      const result = await fastify.store.getOrCreateDirectRoom({
+        token,
+        peerUserId
+      });
+
+      if (!result?.ok) {
+        if (result?.error === 'unauthorized') {
+          return reply.status(401).send({ ok: false, error: 'unauthorized' });
+        }
+
+        if (result?.error === 'user_not_found') {
+          return reply.status(404).send({ ok: false, error: 'user_not_found' });
+        }
+
+        if (result?.error === 'peer_user_required' || result?.error === 'self_direct_not_allowed') {
+          return reply.status(400).send({ ok: false, error: result.error });
+        }
+
+        return reply.status(400).send({ ok: false, error: result?.error || 'direct_room_open_failed' });
+      }
+
+      return result;
+    } catch (error) {
+      fastify.log.error('Error opening direct room:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
   // Создать invite для комнаты
   fastify.post('/:roomId/invites', async (request, reply) => {
     const { roomId } = request.params;
