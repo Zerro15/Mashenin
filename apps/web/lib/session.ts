@@ -37,6 +37,7 @@ export function useAuthRoute(mode: AuthMode, options: UseAuthRouteOptions = {}):
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const guestRedirectTo = getSafeLocalPath(options.guestRedirectTo, '/rooms');
+  const protectedRedirectTo = `/login?next=${encodeURIComponent(getSafeLocalPath(router.asPath, '/rooms'))}`;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -50,7 +51,7 @@ export function useAuthRoute(mode: AuthMode, options: UseAuthRouteOptions = {}):
       setIsChecking(false);
 
       if (mode === 'protected') {
-        router.replace('/login');
+        router.replace(protectedRedirectTo);
       }
 
       return;
@@ -71,7 +72,7 @@ export function useAuthRoute(mode: AuthMode, options: UseAuthRouteOptions = {}):
           setUser(null);
 
           if (mode === 'protected') {
-            router.replace('/login');
+            router.replace(protectedRedirectTo);
           }
 
           return;
@@ -94,7 +95,7 @@ export function useAuthRoute(mode: AuthMode, options: UseAuthRouteOptions = {}):
         setUser(null);
 
         if (mode === 'protected') {
-          router.replace('/login');
+          router.replace(protectedRedirectTo);
         }
       } finally {
         if (isActive) {
@@ -108,7 +109,7 @@ export function useAuthRoute(mode: AuthMode, options: UseAuthRouteOptions = {}):
     return () => {
       isActive = false;
     };
-  }, [guestRedirectTo, mode, router]);
+  }, [guestRedirectTo, mode, protectedRedirectTo, router]);
 
   async function logout() {
     try {
