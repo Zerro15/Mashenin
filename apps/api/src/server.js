@@ -18,6 +18,8 @@ import inviteRoutes from './routes/invites.js';
 import wsChatRoutes from './routes/ws-chat.js';
 import friendsRoutes from './routes/friends.js';
 import eventsRoutes from './routes/events.js';
+import teamRoutes from './routes/teams.js';
+import dmRoutes from './routes/dm.js';
 
 async function buildServer() {
   const fastify = Fastify({
@@ -61,10 +63,12 @@ async function buildServer() {
   // Регистрация маршрутов
   await fastify.register(authRoutes, { prefix: '/api/auth' });
   await fastify.register(roomRoutes, { prefix: '/api/rooms' });
+  await fastify.register(teamRoutes, { prefix: '/api/teams' });
   await fastify.register(inviteRoutes, { prefix: '/api/invites' });
   await fastify.register(wsChatRoutes, { prefix: '/api' });
   await fastify.register(chatRoutes, { prefix: '/api' });
   await fastify.register(friendsRoutes, { prefix: '/api/friends' });
+  await fastify.register(dmRoutes, { prefix: '/api/dm' });
   await fastify.register(eventsRoutes, { prefix: '/api/events' });
 
   // Health check эндпоинт

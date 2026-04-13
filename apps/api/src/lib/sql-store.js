@@ -167,23 +167,7 @@ export async function getRooms({ token } = {}) {
   }));
 }
 
-export async function getFriends() {
-  const pool = getPool();
-  const result = await pool.query(`
-    SELECT
-      u.id,
-      u.display_name,
-      u.presence,
-      u.status_note,
-      r.slug AS room_slug
-    FROM users u
-    LEFT JOIN voice_sessions vs ON vs.user_id = u.id AND vs.ended_at IS NULL
-    LEFT JOIN rooms r ON r.id = vs.room_id
-    ORDER BY u.created_at ASC
-  `);
-
-  return result.rows.map(mapUser);
-}
+// getFriends — see new implementation below (with token parameter)
 
 export async function getEvents() {
   const pool = getPool();
@@ -1813,4 +1797,362 @@ export async function getMessages(roomId, limit = 50, offset = 0) {
   );
 
   return result.rows.reverse(); // Возвращаем в хронологическом порядке
+}
+
+// =============================================
+// TEAMS (бывшие "комнаты" — быстрые конференции)
+// =============================================
+
+export async function getTeams({ token }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return [];
+
+  const result = await pool.query(
+    `
+      SELECT
+        t.id,
+        t.slug,
+        t.name,
+        t.topic,
+        COUNT(tm.user_id)::int AS members
+      FROM teams t
+      JOIN team_memberships tm ON tm.team_id = t.id
+      WHERE tm.user_id = $1
+      GROUP BY t.id
+      ORDER BY t.updated_at DESC
+    `,
+    [user.id]
+  );
+
+  return result.rows.map(row => ({
+    id: row.slug,
+    slug: row.slug,
+    name: row.name,
+    topic: row.topic,
+    members: row.members
+  }));
+}
+
+export async function createTeam({ token, name, topic = '' }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user || !name) return null;
+
+  const slug = name
+    .toLowerCase()
+    .replace(/[а-яё]/g, c => {
+      const map = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};
+      return map[c] || c;
+    })
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
+  const result = await pool.query(
+    `
+      WITH new_team AS (
+        INSERT INTO teams (slug, name, topic, created_by_user_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (slug) DO NOTHING
+        RETURNING id, slug, name, topic, created_by_user_id
+      )
+      INSERT INTO team_memberships (team_id, user_id, role)
+      SELECT id, $4, 'owner' FROM new_team
+      RETURNING team_id
+    `,
+    [slug, name, topic, user.id]
+  );
+
+  if (result.rows.length === 0) {
+    // Slug collision — попробуем с суффиксом
+    const uniqueSlug = `${slug}-${Date.now().toString(36)}`;
+    const retry = await pool.query(
+      `
+        WITH new_team AS (
+          INSERT INTO teams (slug, name, topic, created_by_user_id)
+          VALUES ($1, $2, $3, $4)
+          RETURNING id, slug, name, topic, created_by_user_id
+        )
+        INSERT INTO team_memberships (team_id, user_id, role)
+        SELECT id, $4, 'owner' FROM new_team
+        RETURNING team_id
+      `,
+      [uniqueSlug, name, topic, user.id]
+    );
+    if (retry.rows.length === 0) return null;
+  }
+
+  return {
+    id: slug,
+    slug,
+    name,
+    topic,
+    members: 1,
+    kind: 'team'
+  };
+}
+
+export async function getTeamById(teamId) {
+  const pool = getPool();
+  const [teamResult, membersResult] = await Promise.all([
+    pool.query(
+      `
+        SELECT id, slug, name, topic, created_by_user_id
+        FROM teams
+        WHERE slug = $1
+      `,
+      [teamId]
+    ),
+    pool.query(
+      `
+        SELECT u.id, u.display_name, u.presence, tm.role
+        FROM team_memberships tm
+        JOIN users u ON u.id = tm.user_id
+        JOIN teams t ON t.id = tm.team_id
+        WHERE t.slug = $1
+        ORDER BY lower(u.display_name) ASC
+      `,
+      [teamId]
+    )
+  ]);
+
+  const team = teamResult.rows[0];
+  if (!team) return null;
+
+  return {
+    id: team.slug,
+    slug: team.slug,
+    name: team.name,
+    topic: team.topic,
+    members: membersResult.rows.length,
+    membersList: membersResult.rows.map(m => ({
+      id: m.id,
+      name: m.display_name,
+      presence: m.presence,
+      role: m.role
+    }))
+  };
+}
+
+// =============================================
+// FRIENDSHIPS
+// =============================================
+
+export async function getFriends({ token }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return [];
+
+  const result = await pool.query(
+    `
+      SELECT
+        u.id,
+        u.display_name,
+        u.presence,
+        u.status_note,
+        f.status as friendship_status,
+        (SELECT COUNT(*) FROM direct_messages dm
+         WHERE (dm.sender_id = $1 AND dm.receiver_id = u.id)
+            OR (dm.sender_id = u.id AND dm.receiver_id = $1)
+         AND dm.is_read = false
+         AND dm.sender_id = u.id
+        )::int as unread_count
+      FROM friendships f
+      JOIN users u ON (
+        (f.user_id = $1 AND f.friend_id = u.id) OR
+        (f.friend_id = $1 AND f.user_id = u.id)
+      )
+      WHERE f.status = 'accepted'
+      ORDER BY lower(u.display_name) ASC
+    `,
+    [user.id]
+  );
+
+  return result.rows.map(row => ({
+    id: row.id,
+    name: row.display_name,
+    presence: row.presence,
+    statusNote: row.status_note,
+    unreadCount: row.unread_count
+  }));
+}
+
+export async function getFriendRequests({ token }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return [];
+
+  const result = await pool.query(
+    `
+      SELECT u.id, u.display_name, u.presence, f.created_at
+      FROM friendships f
+      JOIN users u ON u.id = f.user_id
+      WHERE f.friend_id = $1 AND f.status = 'pending'
+      ORDER BY f.created_at DESC
+    `,
+    [user.id]
+  );
+
+  return result.rows.map(row => ({
+    id: row.id,
+    name: row.display_name,
+    presence: row.presence,
+    requestedAt: row.created_at
+  }));
+}
+
+export async function sendFriendRequest({ token, friendId }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user || friendId === user.id) return { ok: false, error: 'invalid_target' };
+
+  // Check if friend exists
+  const exists = await pool.query('SELECT id FROM users WHERE id = $1', [friendId]);
+  if (exists.rows.length === 0) return { ok: false, error: 'user_not_found' };
+
+  // Check existing friendship
+  const existing = await pool.query(
+    'SELECT id, status FROM friendships WHERE user_id = $1 AND friend_id = $2',
+    [user.id, friendId]
+  );
+
+  if (existing.rows.length > 0) {
+    const status = existing.rows[0].status;
+    if (status === 'accepted') return { ok: true, message: 'already_friends' };
+    if (status === 'pending') return { ok: true, message: 'request_already_sent' };
+    if (status === 'blocked') return { ok: false, error: 'blocked' };
+  }
+
+  await pool.query(
+    'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+    [user.id, friendId, 'pending']
+  );
+
+  return { ok: true };
+}
+
+export async function acceptFriendRequest({ token, friendId }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return { ok: false, error: 'unauthorized' };
+
+  const result = await pool.query(
+    `UPDATE friendships SET status = 'accepted', updated_at = NOW()
+     WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'
+     RETURNING id`,
+    [friendId, user.id]
+  );
+
+  if (result.rows.length === 0) return { ok: false, error: 'request_not_found' };
+
+  // Create reverse friendship entry too
+  await pool.query(
+    'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+    [user.id, friendId, 'accepted']
+  );
+
+  return { ok: true };
+}
+
+export async function removeFriend({ token, friendId }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return { ok: false, error: 'unauthorized' };
+
+  await pool.query(
+    'DELETE FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+    [user.id, friendId]
+  );
+
+  return { ok: true };
+}
+
+// =============================================
+// DIRECT MESSAGES
+// =============================================
+
+export async function getDirectMessages({ token, peerUserId }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return [];
+
+  const result = await pool.query(
+    `
+      SELECT
+        dm.id,
+        dm.sender_id as "senderId",
+        dm.receiver_id as "receiverId",
+        dm.body,
+        dm.is_read as "isRead",
+        dm.created_at as "sentAt",
+        u.display_name as "senderName"
+      FROM direct_messages dm
+      JOIN users u ON u.id = dm.sender_id
+      WHERE (dm.sender_id = $1 AND dm.receiver_id = $2)
+         OR (dm.sender_id = $2 AND dm.receiver_id = $1)
+      ORDER BY dm.created_at ASC
+    `,
+    [user.id, peerUserId]
+  );
+
+  return result.rows.map(row => ({
+    id: row.id,
+    senderId: row.senderId,
+    senderName: row.senderName,
+    body: row.body,
+    isRead: row.isRead,
+    sentAt: row.sentAt
+  }));
+}
+
+export async function sendDirectMessage({ token, receiverId, body }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user || !body?.trim()) return null;
+
+  const result = await pool.query(
+    `
+      INSERT INTO direct_messages (sender_id, receiver_id, body)
+      VALUES ($1, $2, $3)
+      RETURNING id, sender_id as "senderId", receiver_id as "receiverId", body, created_at as "sentAt"
+    `,
+    [user.id, receiverId, body.trim()]
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    senderId: row.senderId,
+    senderName: user.name,
+    body: row.body,
+    isRead: false,
+    sentAt: row.sentAt
+  };
+}
+
+export async function markDirectMessagesRead({ token, peerUserId }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return;
+
+  await pool.query(
+    `UPDATE direct_messages SET is_read = true
+     WHERE sender_id = $1 AND receiver_id = $2 AND is_read = false`,
+    [peerUserId, user.id]
+  );
+}
+
+export async function getUnreadDMCount({ token }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return 0;
+
+  const result = await pool.query(
+    'SELECT COUNT(*)::int as count FROM direct_messages WHERE receiver_id = $1 AND is_read = false',
+    [user.id]
+  );
+
+  return result.rows[0]?.count || 0;
 }

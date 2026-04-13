@@ -19,10 +19,6 @@ export async function getRooms(...args) {
   return impl().getRooms(...args);
 }
 
-export async function getFriends(...args) {
-  return impl().getFriends(...args);
-}
-
 export async function getEvents(...args) {
   return impl().getEvents(...args);
 }
@@ -161,4 +157,55 @@ export async function saveMessage(...args) {
 
 export async function getMessages(...args) {
   return impl().getMessages?.(...args) || [];
+}
+
+// Teams (бывшие rooms — быстрые конференции)
+export async function getTeams(...args) {
+  return impl().getTeams?.(...args) || [];
+}
+
+export async function createTeam(...args) {
+  return impl().createTeam?.(...args) || null;
+}
+
+export async function getTeamById(...args) {
+  return impl().getTeamById?.(...args) || null;
+}
+
+// Friendships
+export async function getFriends(...args) {
+  return impl().getFriends?.(...args) || [];
+}
+
+export async function getFriendRequests(...args) {
+  return impl().getFriendRequests?.(...args) || [];
+}
+
+export async function sendFriendRequest(...args) {
+  return impl().sendFriendRequest?.(...args) || { ok: false, error: 'not_supported' };
+}
+
+export async function acceptFriendRequest(...args) {
+  return impl().acceptFriendRequest?.(...args) || { ok: false, error: 'not_supported' };
+}
+
+export async function removeFriend(...args) {
+  return impl().removeFriend?.(...args) || { ok: false, error: 'not_supported' };
+}
+
+// Direct Messages
+export async function getDirectMessages(...args) {
+  return impl().getDirectMessages?.(...args) || [];
+}
+
+export async function sendDirectMessage(...args) {
+  return impl().sendDirectMessage?.(...args) || null;
+}
+
+export async function markDirectMessagesRead(...args) {
+  return impl().markDirectMessagesRead?.(...args) || null;
+}
+
+export async function getUnreadDMCount(...args) {
+  return impl().getUnreadDMCount?.(...args) || 0;
 }
