@@ -373,6 +373,15 @@ export async function getSessionUser(token) {
   return publicUser(user);
 }
 
+/**
+ * Получение пользователя по userId напрямую (для WS auth).
+ */
+export async function getUserById(userId) {
+  const state = readState();
+  const user = state.users.find((friend) => friend.id === userId) || null;
+  return publicUser(user);
+}
+
 export async function clearSession(token) {
   updateState((state) => {
     state.sessions = state.sessions.filter((session) => session.token !== token);
@@ -1048,7 +1057,7 @@ export async function getRoomSocial(roomId) {
   };
 }
 
-export async function createMessage({ token, roomId, body }) {
+export async function createMessage({ token, roomId, body, authorId, authorName }) {
   const trimmed = (body || "").trim();
   if (!trimmed) {
     return null;
@@ -1057,8 +1066,31 @@ export async function createMessage({ token, roomId, body }) {
   let created = null;
 
   updateState((state) => {
-    const session = state.sessions.find((entry) => entry.token === token);
-    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    let user = null;
+
+    // WS-подключение может передавать authorId напрямую
+    if (authorId) {
+      user = state.users.find((entry) => entry.id === authorId);
+      // Если пользователя нет — создаём临时 (для WS с авторизацией это не должно случаться)
+      if (!user) {
+        user = {
+          id: authorId,
+          name: authorName || 'Пользователь',
+          status: 'online',
+          note: 'в чате через WebSocket',
+          roomId: null,
+          email: null,
+          passwordHash: null,
+          about: ''
+        };
+        state.users.push(user);
+      }
+    } else {
+      // HTTP-подключение через token
+      const session = state.sessions.find((entry) => entry.token === token);
+      user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    }
+
     const room = state.rooms.find((entry) => entry.id === roomId);
 
     if (!user || !room) {

@@ -55,6 +55,10 @@ export async function getSessionUser(...args) {
   return impl().getSessionUser(...args);
 }
 
+export async function getUserById(...args) {
+  return impl().getUserById?.(...args) || impl().getSessionUser?.(...args);
+}
+
 export async function updateProfile(...args) {
   return impl().updateProfile(...args);
 }

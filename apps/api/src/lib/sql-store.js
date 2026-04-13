@@ -630,6 +630,12 @@ export async function getSessionUser(token) {
   return row ? mapUser(row) : null;
 }
 
+export async function getUserById(userId) {
+  const pool = getPool();
+  const row = await pool.query('SELECT id, display_name, email, presence, status_note, room_slug FROM users WHERE id = $1', [userId]);
+  return row.rows[0] ? mapUser(row.rows[0]) : null;
+}
+
 export async function updateProfile({ token, displayName, about }) {
   const normalizedName = String(displayName || "").trim();
   const normalizedAbout = String(about || "").trim();

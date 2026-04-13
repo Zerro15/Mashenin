@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../../components/layout/Header';
 import { createApiClient, getSessionToken, clearSessionToken } from '../../lib/api';
 import { useAuthRoute } from '../../lib/session';
+import { useChatSocket, ChatSocketMessage, TypingUser } from '../../hooks/useChatSocket';
 
 interface RoomMessage {
   id: string;
@@ -115,6 +116,15 @@ function mergeMessages(currentMessages: RoomMessage[], nextMessages: RoomMessage
   return Array.from(byId.values()).sort(
     (left, right) => new Date(left.sentAt).getTime() - new Date(right.sentAt).getTime()
   );
+}
+
+function wsMessageToRoomMessage(wsMsg: ChatSocketMessage): RoomMessage {
+  return {
+    id: wsMsg.id,
+    author: wsMsg.author,
+    sentAt: wsMsg.sentAt,
+    text: wsMsg.text,
+  };
 }
 
 function areSpeakersEqual(currentSpeakers: RoomSpeaker[] = [], nextSpeakers: RoomSpeaker[] = []) {
@@ -329,6 +339,11 @@ export default function RoomPage() {
   const [voiceParticipants, setVoiceParticipants] = useState<VoiceParticipantDiagnostics[]>([]);
   const [voiceDiagnostics, setVoiceDiagnostics] = useState<VoiceDiagnosticsSummary>(createInitialVoiceDiagnostics());
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  // Real-time state
+  const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser>>(new Map());
+  const [onlineUsers, setOnlineUsers] = useState<Array<{ id: string; name: string }>>([]);
+  const isDraftingRef = useRef(false);
+  const wsStatusRef = useRef<string>('disconnected');
   const liveRoomRef = useRef<any>(null);
   const localAudioTrackRef = useRef<any>(null);
   const voiceTeardownRef = useRef(false);
@@ -533,6 +548,13 @@ export default function RoomPage() {
       return;
     }
 
+    // Polling используем ТОЛЬКО как fallback когда WS не подключён
+    const isWsConnected = wsStatusRef.current === 'connected';
+    if (isWsConnected) {
+      // WS работает — polling не нужен
+      return;
+    }
+
     let isActive = true;
     let isRefreshing = false;
 
@@ -683,6 +705,64 @@ export default function RoomPage() {
       window.removeEventListener('beforeunload', handlePageHide);
     };
   }, [roomId]);
+
+  // --- WebSocket for real-time messages ---
+  const handleWsMessage = useCallback((message: ChatSocketMessage) => {
+    const roomMsg = wsMessageToRoomMessage(message);
+    setMessages((prev) => {
+      // Не добавляем дубликаты
+      if (prev.some((m) => m.id === roomMsg.id)) return prev;
+      return [...prev, roomMsg];
+    });
+  }, []);
+
+  const handleWsEvent = useCallback((event: any) => {
+    if (event.type === 'typing') {
+      if (event.isTyping) {
+        setTypingUsers((prev) => {
+          const next = new Map(prev);
+          next.set(event.userId, { id: event.userId, name: event.userName });
+          return next;
+        });
+      } else {
+        setTypingUsers((prev) => {
+          if (!prev.has(event.userId)) return prev;
+          const next = new Map(prev);
+          next.delete(event.userId);
+          return next;
+        });
+      }
+    } else if (event.type === 'presence_update' && Array.isArray(event.onlineUsers)) {
+      setOnlineUsers(event.onlineUsers);
+    }
+  }, []);
+
+  const wsEnabled = !isChecking && !!user && !!room;
+
+  const {
+    status: wsStatus,
+    onlineUsers: wsOnlineUsers,
+    sendTyping,
+  } = useChatSocket({
+    roomId,
+    userId: user?.id,
+    userName: user?.name,
+    onMessage: handleWsMessage,
+    onEvent: handleWsEvent,
+    enabled: wsEnabled,
+  });
+
+  // Sync onlineUsers from WS
+  useEffect(() => {
+    if (wsOnlineUsers.length > 0) {
+      setOnlineUsers(wsOnlineUsers);
+    }
+  }, [wsOnlineUsers]);
+
+  // Sync wsStatus to ref for polling useEffect
+  useEffect(() => {
+    wsStatusRef.current = wsStatus;
+  }, [wsStatus]);
 
   function stopVoiceDiagnosticsPolling() {
     if (voiceDiagnosticsIntervalRef.current !== null) {
@@ -1346,28 +1426,60 @@ export default function RoomPage() {
     setIsSending(true);
     setSendError('');
 
-    try {
-      const response = await apiClient.post(`/api/rooms/${roomId}/messages`, {
-        body: draft
-      });
+    // Отправляем через WS если подключён
+    if (wsStatus === 'connected') {
+      sendTyping(false); // Остановить typing при отправке
+      // Сообщение уже получит WS и добавит через handleWsMessage
+      // Но нам нужно подтвердить отправку — используем HTTP для confirm
+      try {
+        const response = await apiClient.post(`/api/rooms/${roomId}/messages`, {
+          body: draft
+        });
 
-      if (!response.data?.ok || !response.data?.message) {
-        setSendError('Не удалось отправить сообщение.');
-        return;
+        if (!response.data?.ok || !response.data?.message) {
+          setSendError('Не удалось отправить сообщение.');
+          setDraft('');
+          setIsSending(false);
+          return;
+        }
+
+        // WS сам добавит сообщение, но на всякий случай через HTTP confirm
+        setMessagesState('ready');
+        setDraft('');
+      } catch (submitError: any) {
+        const nextError =
+          submitError?.response?.status === 401
+            ? 'Сессия истекла. Войди снова.'
+            : 'Не удалось отправить сообщение.';
+        setSendError(nextError);
+      } finally {
+        setIsSending(false);
       }
+    } else {
+      // HTTP fallback
+      try {
+        const response = await apiClient.post(`/api/rooms/${roomId}/messages`, {
+          body: draft
+        });
 
-      setMessages((currentMessages) => [...currentMessages, response.data.message]);
-      setMessagesState('ready');
-      setDraft('');
-    } catch (submitError: any) {
-      const nextError =
-        submitError?.response?.status === 401
-          ? 'Сессия истекла. Войди снова.'
-          : 'Не удалось отправить сообщение.';
+        if (!response.data?.ok || !response.data?.message) {
+          setSendError('Не удалось отправить сообщение.');
+          return;
+        }
 
-      setSendError(nextError);
-    } finally {
-      setIsSending(false);
+        setMessages((currentMessages) => [...currentMessages, response.data.message]);
+        setMessagesState('ready');
+        setDraft('');
+      } catch (submitError: any) {
+        const nextError =
+          submitError?.response?.status === 401
+            ? 'Сессия истекла. Войди снова.'
+            : 'Не удалось отправить сообщение.';
+
+        setSendError(nextError);
+      } finally {
+        setIsSending(false);
+      }
     }
   }
 
@@ -1634,7 +1746,20 @@ export default function RoomPage() {
                   <textarea
                     className="text-area"
                     value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
+                    onChange={(event) => {
+                      setDraft(event.target.value);
+                      // Typing indicator
+                      if (wsStatus === 'connected' && sendTyping) {
+                        isDraftingRef.current = true;
+                        sendTyping(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (wsStatus === 'connected' && sendTyping) {
+                        isDraftingRef.current = false;
+                        sendTyping(false);
+                      }
+                    }}
                     placeholder={`Напиши сообщение в ${room.name}`}
                     rows={3}
                   />
@@ -1644,7 +1769,11 @@ export default function RoomPage() {
                       <p className="form-error">{sendError}</p>
                     ) : (
                       <span className="composer-hint">
-                        {messagesSyncState === 'syncing' ? 'Обновляется...' : 'Ответ в эту комнату'}
+                        {messagesSyncState === 'syncing' ? 'Обновляется...' :
+                         wsStatus === 'connected' ? 'Онлайн' :
+                         wsStatus === 'connecting' ? 'Подключаюсь...' :
+                         wsStatus === 'fallback' ? 'Режим offline' :
+                         'Ответ в эту комнату'}
                       </span>
                     )}
                     <button className="button" type="submit" disabled={isSending || !draft.trim()}>
@@ -1652,6 +1781,24 @@ export default function RoomPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Typing indicator */}
+                {typingUsers.size > 0 && (
+                  <div className="typing-indicator">
+                    {Array.from(typingUsers.values())
+                      .map((u) => u.name)
+                      .join(', ')}{' '}
+                    {typingUsers.size === 1 ? 'печатает' : 'печатают'}...
+                  </div>
+                )}
+
+                {/* Online users */}
+                {onlineUsers.length > 0 && wsStatus === 'connected' && (
+                  <div className="online-users-indicator">
+                    <span className="online-dot" />
+                    {onlineUsers.map((u) => u.name).join(', ')}
+                  </div>
+                )}
               </form>
             </div>
           </section>
