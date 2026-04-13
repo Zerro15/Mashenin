@@ -101,6 +101,8 @@ export default async function roomRoutes(fastify) {
     }
   });
 
+  // === SPECIFIC routes (must be registered BEFORE generic /:roomId) ===
+
   // Создать invite для комнаты
   fastify.post('/:roomId/invites', async (request, reply) => {
     const { roomId } = request.params;
@@ -135,26 +137,6 @@ export default async function roomRoutes(fastify) {
       return result;
     } catch (error) {
       fastify.log.error('Error creating room invite:', error);
-      return reply.status(500).send({ ok: false, error: 'internal_error' });
-    }
-  });
-
-  // Получить информацию о комнате
-  fastify.get('/:roomId', async (request, reply) => {
-    const { roomId } = request.params;
-
-    try {
-      const room = await fastify.store.getRoomById(roomId);
-      if (!room) {
-        return reply.status(404).send({ ok: false, error: 'room_not_found' });
-      }
-
-      return {
-        ok: true,
-        room
-      };
-    } catch (error) {
-      fastify.log.error('Error fetching room:', error);
       return reply.status(500).send({ ok: false, error: 'internal_error' });
     }
   });
@@ -394,7 +376,7 @@ export default async function roomRoutes(fastify) {
   // Обновить статус пользователя в комнате
   fastify.post('/:roomId/presence', async (request, reply) => {
     const { roomId } = request.params;
-    const { userId, status } = request.body; // status: 'online', 'away', 'offline'
+    const { userId, status } = request.body;
 
     if (!userId || !status) {
       return reply.status(400).send({ ok: false, error: 'user_id_and_status_required' });
@@ -403,7 +385,6 @@ export default async function roomRoutes(fastify) {
     try {
       await fastify.store.updateUserPresence(roomId, userId, status);
 
-      // Рассылаем обновление через WebSocket
       fastify.chat.broadcastToRoom(roomId, userId, {
         type: 'presence_update',
         userId,
@@ -414,6 +395,28 @@ export default async function roomRoutes(fastify) {
       return { ok: true };
     } catch (error) {
       fastify.log.error('Error updating presence:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
+  // === GENERIC route (must be registered LAST) ===
+
+  // Получить информацию о комнате
+  fastify.get('/:roomId', async (request, reply) => {
+    const { roomId } = request.params;
+
+    try {
+      const room = await fastify.store.getRoomById(roomId);
+      if (!room) {
+        return reply.status(404).send({ ok: false, error: 'room_not_found' });
+      }
+
+      return {
+        ok: true,
+        room
+      };
+    } catch (error) {
+      fastify.log.error('Error fetching room:', error);
       return reply.status(500).send({ ok: false, error: 'internal_error' });
     }
   });

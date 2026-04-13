@@ -60,6 +60,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./infra/postgres/02-teams-friends-dm.sql:/docker-entrypoint-initdb.d/02-migration.sql:ro
     networks:
       - mashenin
 

@@ -88,11 +88,11 @@ export async function createMessage(...args) {
 }
 
 export async function updateMessage(...args) {
-  return impl().updateMessage?.(...args) || null;
+  return impl().updateMessage(...args);
 }
 
 export async function deleteMessage(...args) {
-  return impl().deleteMessage?.(...args) || null;
+  return impl().deleteMessage(...args);
 }
 
 export async function createRoom(...args) {

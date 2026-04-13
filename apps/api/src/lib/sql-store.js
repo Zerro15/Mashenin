@@ -577,7 +577,7 @@ export async function loginWithPassword({ email, password, ttlSeconds = 604800 }
     await client.query(
       `
         UPDATE users
-        SET presence = CASE WHEN presence = 'in_voice' THEN 'in_voice' ELSE 'online' END,
+        SET presence = CASE WHEN presence = 'in_voice' THEN 'in_voice'::user_presence ELSE 'online'::user_presence END,
             status_note = CASE WHEN presence = 'in_voice' THEN status_note ELSE 'снова в сети' END,
             updated_at = NOW()
         WHERE id = $1
@@ -2214,4 +2214,66 @@ export async function createTeamMessage({ token, teamId, body }) {
     sentAt: row.created_at,
     text: row.body
   };
+}
+
+// =============================================
+// ROOM MESSAGE EDIT / DELETE
+// =============================================
+
+export async function updateMessage({ token, roomId, messageId, body }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return null;
+
+  // Check ownership first
+  const check = await pool.query(
+    `SELECT m.id, m.body FROM messages m
+     WHERE m.id = $1 AND m.author_user_id = $2`,
+    [messageId, user.id]
+  );
+
+  if (check.rows.length === 0) {
+    // Check if message exists but wrong author
+    const exists = await pool.query(`SELECT id FROM messages WHERE id = $1`, [messageId]);
+    if (exists.rows.length === 0) return 'not_found';
+    return 'forbidden';
+  }
+
+  const result = await pool.query(
+    `UPDATE messages SET body = $1, edited_at = NOW()
+     WHERE id = $2
+     RETURNING id, body, created_at, edited_at`,
+    [body, messageId]
+  );
+
+  const row = result.rows[0];
+  if (!row) return 'not_found';
+
+  return {
+    id: row.id,
+    text: row.body,
+    sentAt: row.created_at,
+    editedAt: row.edited_at
+  };
+}
+
+export async function deleteMessage({ token, roomId, messageId }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user) return null;
+
+  // Check ownership first
+  const check = await pool.query(
+    `SELECT id FROM messages WHERE id = $1 AND author_user_id = $2`,
+    [messageId, user.id]
+  );
+
+  if (check.rows.length === 0) {
+    const exists = await pool.query(`SELECT id FROM messages WHERE id = $1`, [messageId]);
+    if (exists.rows.length === 0) return 'not_found';
+    return 'forbidden';
+  }
+
+  await pool.query(`DELETE FROM messages WHERE id = $1`, [messageId]);
+  return true;
 }
