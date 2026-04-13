@@ -4,7 +4,8 @@ export async function createPool(config) {
   const { Pool } = await import("pg");
 
   if (pool) {
-    await pool.end();
+    // Pool already exists — reuse it (idempotent for hot-reload safety)
+    return pool;
   }
 
   pool = new Pool({

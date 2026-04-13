@@ -220,13 +220,13 @@ export default async function roomRoutes(fastify) {
         body
       });
 
+      if (message === 'not_found') {
+        return reply.status(404).send({ ok: false, error: 'message_not_found' });
+      }
+      if (message === 'forbidden') {
+        return reply.status(403).send({ ok: false, error: 'not_author' });
+      }
       if (!message) {
-        if (message === 'not_found') {
-          return reply.status(404).send({ ok: false, error: 'message_not_found' });
-        }
-        if (message === 'forbidden') {
-          return reply.status(403).send({ ok: false, error: 'not_author' });
-        }
         return reply.status(400).send({ ok: false, error: 'update_failed' });
       }
 
@@ -253,13 +253,13 @@ export default async function roomRoutes(fastify) {
         messageId
       });
 
+      if (result === 'not_found') {
+        return reply.status(404).send({ ok: false, error: 'message_not_found' });
+      }
+      if (result === 'forbidden') {
+        return reply.status(403).send({ ok: false, error: 'not_author' });
+      }
       if (!result) {
-        if (result === 'not_found') {
-          return reply.status(404).send({ ok: false, error: 'message_not_found' });
-        }
-        if (result === 'forbidden') {
-          return reply.status(403).send({ ok: false, error: 'not_author' });
-        }
         return reply.status(400).send({ ok: false, error: 'delete_failed' });
       }
 
