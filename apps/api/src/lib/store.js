@@ -209,3 +209,12 @@ export async function markDirectMessagesRead(...args) {
 export async function getUnreadDMCount(...args) {
   return impl().getUnreadDMCount?.(...args) || 0;
 }
+
+// Team messages
+export async function getTeamMessages(...args) {
+  return impl().getTeamMessages?.(...args) || [];
+}
+
+export async function createTeamMessage(...args) {
+  return impl().createTeamMessage?.(...args) || null;
+}

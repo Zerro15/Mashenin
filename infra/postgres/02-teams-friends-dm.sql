@@ -51,6 +51,17 @@ CREATE INDEX IF NOT EXISTS idx_dm_sender ON direct_messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_dm_receiver ON direct_messages(receiver_id);
 CREATE INDEX IF NOT EXISTS idx_dm_conversation ON direct_messages(sender_id, receiver_id, created_at);
 
+-- 3b. TEAM MESSAGES (сообщения внутри команд)
+CREATE TABLE IF NOT EXISTS team_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  author_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_messages_team ON team_messages(team_id);
+
 -- 4. SEED: создаём тестовые команды из существующих комнат
 INSERT INTO teams (id, slug, name, topic, created_by_user_id)
 SELECT

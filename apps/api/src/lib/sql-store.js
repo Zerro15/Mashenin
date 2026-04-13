@@ -2156,3 +2156,62 @@ export async function getUnreadDMCount({ token }) {
 
   return result.rows[0]?.count || 0;
 }
+
+// =============================================
+// TEAM MESSAGES
+// =============================================
+
+export async function getTeamMessages(teamId) {
+  const pool = getPool();
+  const result = await pool.query(
+    `
+      SELECT
+        tm.id,
+        tm.team_id as "teamId",
+        tm.author_user_id as "authorId",
+        u.display_name as "authorName",
+        tm.body as "text",
+        tm.created_at as "sentAt"
+      FROM team_messages tm
+      JOIN users u ON u.id = tm.author_user_id
+      JOIN teams t ON t.id = tm.team_id
+      WHERE t.slug = $1
+      ORDER BY tm.created_at ASC
+    `,
+    [teamId]
+  );
+
+  return result.rows.map(row => ({
+    id: row.id,
+    author: row.authorName,
+    sentAt: row.sentAt,
+    text: row.text
+  }));
+}
+
+export async function createTeamMessage({ token, teamId, body }) {
+  const pool = getPool();
+  const user = await getSessionUser(token);
+  if (!user || !body?.trim()) return null;
+
+  const result = await pool.query(
+    `
+      INSERT INTO team_messages (team_id, author_user_id, body)
+      SELECT t.id, $2, $3
+      FROM teams t
+      WHERE t.slug = $1
+      RETURNING id, body, created_at
+    `,
+    [teamId, user.id, body.trim()]
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    author: user.name,
+    sentAt: row.created_at,
+    text: row.body
+  };
+}

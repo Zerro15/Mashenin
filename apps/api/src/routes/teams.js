@@ -40,7 +40,38 @@ export default async function teamRoutes(fastify) {
     }
   });
 
-  // Получить команду
+  // Получить сообщения команды (ДОЛЖЕН идти ПЕРЕД /:teamId!)
+  fastify.get('/:teamId/messages', async (request, reply) => {
+    const { teamId } = request.params;
+    try {
+      const messages = await fastify.store.getTeamMessages(teamId);
+      return { ok: true, messages };
+    } catch (error) {
+      fastify.log.error('Error fetching team messages:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
+  // Отправить сообщение в команду
+  fastify.post('/:teamId/messages', async (request, reply) => {
+    const { teamId } = request.params;
+    const token = getSessionToken(request);
+    const body = String(request.body?.body || '').trim();
+
+    if (!token) return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    if (!body) return reply.status(400).send({ ok: false, error: 'message_body_required' });
+
+    try {
+      const message = await fastify.store.createTeamMessage({ token, teamId, body });
+      if (!message) return reply.status(400).send({ ok: false, error: 'message_create_failed' });
+      return { ok: true, message };
+    } catch (error) {
+      fastify.log.error('Error creating team message:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
+  // Получить команду (должен идти ПОСЛЕ /:teamId/messages)
   fastify.get('/:teamId', async (request, reply) => {
     const { teamId } = request.params;
     try {

@@ -40,7 +40,7 @@ export default function TeamPage() {
       try {
         const [teamRes, msgsRes] = await Promise.all([
           apiClient.get(`/api/teams/${slug}`),
-          apiClient.get(`/api/rooms/${slug}/messages`)
+          apiClient.get(`/api/teams/${slug}/messages`)
         ]);
 
         if (teamRes.data?.ok) {
@@ -50,7 +50,8 @@ export default function TeamPage() {
           setMessages(msgsRes.data.messages || []);
         }
         setLoadState('ready');
-      } catch {
+      } catch (err: any) {
+        console.error('Load error:', err?.response?.data || err?.message);
         setLoadState('error');
       }
     }
@@ -66,16 +67,19 @@ export default function TeamPage() {
 
     setIsSending(true);
     try {
-      const res = await apiClient.post(`/api/rooms/${slug}/messages`, { body: draft });
+      const res = await apiClient.post(`/api/teams/${slug}/messages`, { body: draft });
       if (res.data?.ok && res.data.message) {
+        const msg = res.data.message;
         setMessages(prev => [...prev, {
-          id: res.data.message.id,
-          author: res.data.message.author || user?.name,
-          sentAt: res.data.message.sentAt,
-          text: res.data.message.text
+          id: msg.id,
+          author: msg.author || user?.name,
+          sentAt: msg.sentAt,
+          text: msg.text
         }]);
         setDraft('');
       }
+    } catch (err: any) {
+      console.error('Send error:', err?.response?.data || err?.message);
     } finally {
       setIsSending(false);
     }
