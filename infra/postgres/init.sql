@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE user_presence AS ENUM ('offline', 'online', 'away', 'in_voice');
-CREATE TYPE room_kind AS ENUM ('persistent', 'temporary');
+CREATE TYPE room_kind AS ENUM ('persistent', 'temporary', 'direct');
 CREATE TYPE room_member_role AS ENUM ('owner', 'moderator', 'member');
 CREATE TYPE invite_status AS ENUM ('active', 'disabled', 'exhausted');
 CREATE TYPE event_rsvp AS ENUM ('going', 'maybe', 'declined');

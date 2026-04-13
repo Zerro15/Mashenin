@@ -12,6 +12,8 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 3000
+      API_BASE_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
     depends_on:
       - api
     networks:
@@ -40,7 +42,7 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_WS_URL: ${LIVEKIT_WS_URL}
-      DATA_MODE: file
+      DATA_PROVIDER: sql
     depends_on:
       - postgres
       - redis
