@@ -20,7 +20,7 @@ interface UseAuthRouteResult {
   logout: () => Promise<void>;
 }
 
-export function getSafeLocalPath(value: unknown, fallback = '/rooms') {
+export function getSafeLocalPath(value: unknown, fallback = '/teams') {
   if (typeof value !== 'string') {
     return fallback;
   }
@@ -36,7 +36,7 @@ export function useAuthRoute(mode: AuthMode, options: UseAuthRouteOptions = {}):
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isChecking, setIsChecking] = useState(true);
-  const guestRedirectTo = getSafeLocalPath(options.guestRedirectTo, '/rooms');
+  const guestRedirectTo = getSafeLocalPath(options.guestRedirectTo, '/teams');
 
   function getCurrentPath(): string {
     if (typeof window !== 'undefined' && window.location.pathname) {

@@ -38,11 +38,11 @@ export default function Header({
 
       {user ? (
         <nav className="header-nav" aria-label="Основная навигация">
-          <a href="/rooms" className="header-nav-link">
-            Комнаты
-            {totalUnread > 0 && (
-              <span className="nav-unread-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>
-            )}
+          <a href="/teams" className="header-nav-link">
+            Команды
+          </a>
+          <a href="/friends" className="header-nav-link">
+            Друзья
           </a>
           <a href="/settings" className="header-nav-link header-nav-link--settings" aria-label="Настройки">
             ⚙
