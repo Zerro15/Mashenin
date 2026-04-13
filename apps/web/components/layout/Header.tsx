@@ -5,12 +5,14 @@ interface HeaderProps {
   user?: SessionUser | null;
   isCheckingSession?: boolean;
   onLogout?: () => Promise<void>;
+  totalUnread?: number;
 }
 
 export default function Header({
   user = null,
   isCheckingSession = false,
-  onLogout
+  onLogout,
+  totalUnread = 0
 }: HeaderProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -36,7 +38,12 @@ export default function Header({
 
       {user ? (
         <nav className="header-nav" aria-label="Основная навигация">
-          <a href="/rooms">Комнаты</a>
+          <a href="/rooms" className="header-nav-link">
+            Комнаты
+            {totalUnread > 0 && (
+              <span className="nav-unread-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>
+            )}
+          </a>
         </nav>
       ) : (
         <div />

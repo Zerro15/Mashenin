@@ -4,6 +4,7 @@ import Header from '../../components/layout/Header';
 import { createApiClient, getSessionToken, clearSessionToken } from '../../lib/api';
 import { useAuthRoute } from '../../lib/session';
 import { useChatSocket, ChatSocketMessage, TypingUser } from '../../hooks/useChatSocket';
+import { useUnreadTracker } from '../../hooks/useUnreadTracker';
 
 interface RoomMessage {
   id: string;
@@ -344,6 +345,12 @@ export default function RoomPage() {
   const [onlineUsers, setOnlineUsers] = useState<Array<{ id: string; name: string }>>([]);
   const isDraftingRef = useRef(false);
   const wsStatusRef = useRef<string>('disconnected');
+  // Unread tracker
+  const { markAsRead, onNewMessage, totalUnread } = useUnreadTracker({
+    userId: user?.id,
+    currentRoomId: room?.id,
+    enabled: !isChecking && !!user && !!room,
+  });
   const liveRoomRef = useRef<any>(null);
   const localAudioTrackRef = useRef<any>(null);
   const voiceTeardownRef = useRef(false);
@@ -524,6 +531,11 @@ export default function RoomPage() {
 
         setMessages(messagesResponse.data?.ok ? messagesResponse.data.messages || [] : []);
         setMessagesState('ready');
+        // Mark as read при загрузке
+        const loadedMessages = messagesResponse.data?.ok ? messagesResponse.data.messages || [] : [];
+        if (loadedMessages.length > 0 && room.id) {
+          markAsRead(room.id, loadedMessages[loadedMessages.length - 1].id);
+        }
       } catch (loadError) {
         if (!isActive) {
           return;
@@ -714,7 +726,9 @@ export default function RoomPage() {
       if (prev.some((m) => m.id === roomMsg.id)) return prev;
       return [...prev, roomMsg];
     });
-  }, []);
+    // Track unread + notification
+    onNewMessage(message.id, message.id, message.author, message.text);
+  }, [onNewMessage]);
 
   const handleWsEvent = useCallback((event: any) => {
     if (event.type === 'typing') {
@@ -1485,7 +1499,7 @@ export default function RoomPage() {
 
   return (
     <div className="container">
-      <Header user={user} isCheckingSession={isChecking} onLogout={logout} />
+      <Header user={user} isCheckingSession={isChecking} onLogout={logout} totalUnread={totalUnread} />
 
       <main className="main">
         {isChecking ? (
@@ -1651,6 +1665,35 @@ export default function RoomPage() {
               </section>
 
               <div ref={remoteAudioMountRef} aria-hidden="true" className="voice-audio-mount" />
+
+              {/* Room members list */}
+              {roomParticipants.length > 0 && (
+                <section className="room-members-card">
+                  <h3>Участники комнаты</h3>
+                  <div className="room-members-list">
+                    {roomParticipants.map((member) => {
+                      const isOnline = onlineUsers.some((u) => u.id === member.id);
+                      const isYou = member.id === user?.id;
+                      return (
+                        <div key={member.id} className="room-member-row">
+                          <div className={`room-member-avatar ${isOnline ? 'online' : 'offline'}`}>
+                            {member.name.slice(0, 1).toUpperCase()}
+                          </div>
+                          <div className="room-member-copy">
+                            <strong>
+                              {member.name}
+                              {isYou ? ' · ты' : ''}
+                            </strong>
+                            <span className={`room-member-status ${isOnline ? 'online' : 'offline'}`}>
+                              {isOnline ? 'онлайн' : 'был(а) недавно'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
               <div className="message-list">
                 {messagesState === 'loading' ? (

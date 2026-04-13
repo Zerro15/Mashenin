@@ -52,6 +52,7 @@ export default async function wsChatRoutes(fastify) {
     const { roomId } = req.params;
     let userId = null;
     let userName = null;
+    let sessionToken = null; // оригинальный token для presence операций
     let isAuthenticated = false;
 
     connection.socket.on('message', async (rawMessage) => {
@@ -78,6 +79,7 @@ export default async function wsChatRoutes(fastify) {
 
           userId = sessionUser.id;
           userName = sessionUser.name || sessionUser.displayName || sessionUser.email || 'Аноним';
+          sessionToken = token; // сохраняем для presence
           isAuthenticated = true;
 
           // Подключаем к комнате
@@ -101,7 +103,7 @@ export default async function wsChatRoutes(fastify) {
 
           // Обновляем presence в store
           try {
-            await fastify.store.joinRoom({ token, roomId });
+            await fastify.store.joinRoom({ token: sessionToken, roomId });
           } catch (e) {
             fastify.log.warn('Failed to update presence on WS join: ' + e.message);
           }
@@ -117,13 +119,11 @@ export default async function wsChatRoutes(fastify) {
             const text = String(data.content || '').trim();
             if (!text) return;
 
-            // Сохраняем через store
+            // Сохраняем через store — используем sessionToken
             const message = await fastify.store.createMessage({
-              token: 'ws:' + userId, // Специальный маркер для WS
+              token: sessionToken,
               roomId,
               body: text,
-              authorId: userId,
-              authorName: userName,
             });
 
             if (!message) return;
@@ -187,12 +187,13 @@ export default async function wsChatRoutes(fastify) {
 
         removeUser(roomId, userId);
 
-        // Обновляем presence
-        try {
-          const token = 'ws:' + userId;
-          void fastify.store.leaveRoom({ token, roomId }).catch(() => {});
-        } catch (e) {
-          // Игнорируем ошибки при cleanup
+        // Обновляем presence через store
+        if (sessionToken) {
+          try {
+            void fastify.store.leaveRoom({ token: sessionToken, roomId }).catch(() => {});
+          } catch (e) {
+            // Игнорируем ошибки при cleanup
+          }
         }
       }
     });

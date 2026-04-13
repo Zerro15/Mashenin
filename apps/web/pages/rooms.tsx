@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Header from '../components/layout/Header';
 import { createApiClient } from '../lib/api';
 import { useAuthRoute } from '../lib/session';
+import { useUnreadTracker } from '../hooks/useUnreadTracker';
 
 interface Room {
   id: string;
@@ -22,6 +23,12 @@ export default function Rooms() {
   const [roomsError, setRoomsError] = useState('');
   const [roomsReloadKey, setRoomsReloadKey] = useState(0);
   const isFirstStart = roomsState === 'empty';
+
+  const { unreadCounts, totalUnread } = useUnreadTracker({
+    userId: user?.id,
+    currentRoomId: undefined, // На /rooms мы не в комнате
+    enabled: !isChecking && !!user,
+  });
 
   useEffect(() => {
     if (isChecking || !user) {
@@ -74,7 +81,7 @@ export default function Rooms() {
 
   return (
     <div className="container">
-      <Header user={user} isCheckingSession={isChecking} onLogout={logout} />
+      <Header user={user} isCheckingSession={isChecking} onLogout={logout} totalUnread={totalUnread} />
 
       <main className="main">
         {isChecking ? (
@@ -138,15 +145,23 @@ export default function Rooms() {
                   </section>
 
                   <div className="grid">
-                    {rooms.map((room) => (
-                      <a key={room.id} href={`/room/${room.id}`} className="room-card">
-                        <h3>{room.name}</h3>
-                        <p>{room.topic}</p>
-                        <div className="members">
-                          <span>{room.members}</span> участников
-                        </div>
-                      </a>
-                    ))}
+                    {rooms.map((room) => {
+                      const unread = unreadCounts[room.id] || 0;
+                      return (
+                        <a key={room.id} href={`/room/${room.id}`} className="room-card">
+                          <div className="room-card-header">
+                            <h3>{room.name}</h3>
+                            {unread > 0 && (
+                              <span className="unread-badge">{unread > 99 ? '99+' : unread}</span>
+                            )}
+                          </div>
+                          <p>{room.topic}</p>
+                          <div className="members">
+                            <span>{room.members}</span> участников
+                          </div>
+                        </a>
+                      );
+                    })}
                   </div>
                 </>
               ) : null}
