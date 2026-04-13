@@ -346,6 +346,8 @@ export default function RoomPage() {
   const [editDraft, setEditDraft] = useState('');
   const [contextMenuMsgId, setContextMenuMsgId] = useState<string | null>(null);
   // Real-time state
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
   const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser>>(new Map());
   const [onlineUsers, setOnlineUsers] = useState<Array<{ id: string; name: string }>>([]);
   const isDraftingRef = useRef(false);
@@ -782,6 +784,49 @@ export default function RoomPage() {
   useEffect(() => {
     wsStatusRef.current = wsStatus;
   }, [wsStatus]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (shouldAutoScrollRef.current && messageListRef.current) {
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    }
+  }, [messages.length]);
+
+  // Scroll to bottom on initial load
+  useEffect(() => {
+    if (messagesState === 'ready' && messageListRef.current && messages.length > 0) {
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    }
+  }, [messagesState, messages.length]);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenuMsgId) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.message-context-menu') && !target.closest('.message-menu-btn')) {
+        setContextMenuMsgId(null);
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [contextMenuMsgId]);
+
+  // Detect user scroll — disable auto-scroll if user scrolls up
+  useEffect(() => {
+    const el = messageListRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      shouldAutoScrollRef.current = isNearBottom;
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
 
   function stopVoiceDiagnosticsPolling() {
     if (voiceDiagnosticsIntervalRef.current !== null) {
@@ -1597,6 +1642,11 @@ export default function RoomPage() {
                   <div className="conversation-meta">
                     {formatMembersLabel(room.members)}
                     {directContextLabel ? ` · ${directContextLabel}` : ''}
+                    <span className={`connection-status connection-status--${wsStatus}`}>
+                      {wsStatus === 'connected' ? '· онлайн' :
+                       wsStatus === 'connecting' ? '· подключаюсь' :
+                       wsStatus === 'fallback' ? '· офлайн' : ''}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1614,6 +1664,12 @@ export default function RoomPage() {
                   <span>Ты уже в нужном разговоре. Здесь можно читать историю, отвечать и продолжать общение.</span>
                 </div>
               ) : null}
+
+              {(wsStatus === 'fallback' || wsStatus === 'error') && (
+                <div className="offline-banner">
+                  Нет подключения к серверу. Сообщения будут доставлены при восстановлении связи.
+                </div>
+              )}
 
               <section className="room-voice-card">
                 <div className="room-voice-copy">
@@ -1748,7 +1804,7 @@ export default function RoomPage() {
                 </section>
               )}
 
-              <div className="message-list">
+              <div className="message-list" ref={messageListRef}>
                 {messagesState === 'loading' ? (
                   <p className="empty">Загружаю сообщения...</p>
                 ) : messagesState === 'error' ? (

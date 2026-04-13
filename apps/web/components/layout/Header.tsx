@@ -44,6 +44,9 @@ export default function Header({
               <span className="nav-unread-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>
             )}
           </a>
+          <a href="/settings" className="header-nav-link header-nav-link--settings" aria-label="Настройки">
+            ⚙
+          </a>
         </nav>
       ) : (
         <div />

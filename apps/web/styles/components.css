@@ -1316,6 +1316,120 @@
   color: #334155;
 }
 
+/* Connection status indicator */
+.connection-status {
+  margin-left: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.connection-status--connected {
+  color: #22c55e;
+}
+
+.connection-status--connecting {
+  color: #f59e0b;
+  animation: typingFade 1.5s ease-in-out infinite;
+}
+
+.connection-status--fallback,
+.connection-status--error {
+  color: #ef4444;
+}
+
+.connection-status--disconnected {
+  color: #94a3b8;
+}
+
+/* Message list auto-scroll */
+.message-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+/* Offline banner */
+.offline-banner {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  color: #92400e;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+/* Settings page */
+.settings-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  max-width: 560px;
+}
+
+.settings-card h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 0.5rem 0;
+}
+
+.settings-description {
+  color: #64748b;
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem 0;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.settings-field-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settings-divider {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 1.5rem 0;
+}
+
+.settings-danger-zone {
+  padding-top: 0.5rem;
+}
+
+.settings-danger-zone h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #475569;
+  margin: 0 0 0.5rem 0;
+}
+
+/* Header nav settings icon */
+.header-nav-link--settings {
+  font-size: 1.1rem;
+  padding: 0 0.25rem;
+}
+
+
+
 
 
 

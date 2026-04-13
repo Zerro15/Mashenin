@@ -250,4 +250,38 @@ export default async function authRoutes(fastify) {
       return reply.status(401).send({ ok: false, error: 'invalid_token' });
     }
   });
+
+  // Обновить профиль
+  fastify.put('/profile', async (request, reply) => {
+    const authHeader = request.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    const displayName = String(request.body?.displayName || '').trim();
+    const about = String(request.body?.about || '').trim();
+
+    if (!displayName) {
+      return reply.status(400).send({ ok: false, error: 'display_name_required' });
+    }
+
+    try {
+      const updated = await fastify.store.updateProfile({
+        token,
+        displayName,
+        about
+      });
+
+      if (!updated) {
+        return reply.status(400).send({ ok: false, error: 'update_failed' });
+      }
+
+      return { ok: true, user: updated };
+    } catch (error) {
+      fastify.log.error('Error updating profile:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
 }
