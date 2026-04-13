@@ -1113,6 +1113,50 @@ export async function createMessage({ token, roomId, body, authorId, authorName 
   return created;
 }
 
+export async function updateMessage({ token, roomId, messageId, body }) {
+  const trimmed = (body || '').trim();
+  if (!trimmed) return null;
+
+  let updated = null;
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const message = state.messages.find((m) => m.id === messageId && m.roomId === roomId);
+
+    if (!message) return null; // not_found
+    if (!user) return null; // not_found
+    if (message.author !== user.name) return 'forbidden';
+
+    message.text = trimmed;
+    message.editedAt = new Date().toISOString();
+    updated = { ...message };
+    return state;
+  });
+
+  return updated;
+}
+
+export async function deleteMessage({ token, roomId, messageId }) {
+  let deleted = false;
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const idx = state.messages.findIndex((m) => m.id === messageId && m.roomId === roomId);
+
+    if (idx === -1) return null; // not_found
+    if (!user) return null;
+    if (state.messages[idx].author !== user.name) return 'forbidden';
+
+    state.messages.splice(idx, 1);
+    deleted = true;
+    return state;
+  });
+
+  return deleted;
+}
+
 export async function createEvent({ token, title, startsAt, roomId = null }) {
   const trimmedTitle = (title || "").trim();
   if (!trimmedTitle || !startsAt) {

@@ -11,6 +11,7 @@ interface RoomMessage {
   author: string;
   sentAt: string;
   text: string;
+  editedAt?: string;
 }
 
 interface RoomSpeaker {
@@ -340,6 +341,10 @@ export default function RoomPage() {
   const [voiceParticipants, setVoiceParticipants] = useState<VoiceParticipantDiagnostics[]>([]);
   const [voiceDiagnostics, setVoiceDiagnostics] = useState<VoiceDiagnosticsSummary>(createInitialVoiceDiagnostics());
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  // Message edit/delete state
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [contextMenuMsgId, setContextMenuMsgId] = useState<string | null>(null);
   // Real-time state
   const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser>>(new Map());
   const [onlineUsers, setOnlineUsers] = useState<Array<{ id: string; name: string }>>([]);
@@ -1430,6 +1435,54 @@ export default function RoomPage() {
     }
   }
 
+  function handleEditStart(message: RoomMessage) {
+    if (message.author !== user?.name) return;
+    setEditingMessageId(message.id);
+    setEditDraft(message.text);
+    setContextMenuMsgId(null);
+  }
+
+  async function handleEditSave() {
+    if (!editingMessageId || !editDraft.trim() || !roomId) return;
+
+    try {
+      const response = await apiClient.put(`/api/rooms/${roomId}/messages/${editingMessageId}`, {
+        body: editDraft
+      });
+
+      if (response.data?.ok && response.data?.message) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === editingMessageId
+              ? { ...m, text: response.data.message.text, editedAt: response.data.message.editedAt }
+              : m
+          )
+        );
+      }
+    } catch {
+      setSendError('Не удалось обновить сообщение.');
+    } finally {
+      setEditingMessageId(null);
+      setEditDraft('');
+    }
+  }
+
+  async function handleDelete(messageId: string) {
+    if (!roomId) return;
+
+    try {
+      const response = await apiClient.delete(`/api/rooms/${roomId}/messages/${messageId}`);
+
+      if (response.data?.ok) {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      }
+    } catch {
+      setSendError('Не удалось удалить сообщение.');
+    } finally {
+      setContextMenuMsgId(null);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1770,17 +1823,82 @@ export default function RoomPage() {
                     <div className="empty-conversation-cta">Поле для сообщения находится сразу ниже.</div>
                   </div>
                 ) : (
-                  messages.map((message) => (
-                    <article key={message.id} className="message-item">
-                      <div className="message-bubble">
-                        <div className="message-topline">
-                          <strong className="message-author">{message.author}</strong>
-                          <span className="message-time">{formatTimestamp(message.sentAt)}</span>
+                  messages.map((message) => {
+                    const isEditing = editingMessageId === message.id;
+                    const isMine = message.author === user?.name;
+                    const showContextMenu = contextMenuMsgId === message.id;
+
+                    return (
+                      <article key={message.id} className="message-item">
+                        <div className="message-bubble">
+                          <div className="message-topline">
+                            <strong className="message-author">{message.author}</strong>
+                            <span className="message-time">
+                              {formatTimestamp(message.sentAt)}
+                              {message.editedAt && <span className="message-edited"> (изменено)</span>}
+                            </span>
+                            {isMine && (
+                              <button
+                                className="message-menu-btn"
+                                type="button"
+                                onClick={() => setContextMenuMsgId(showContextMenu ? null : message.id)}
+                                aria-label="Действия"
+                              >
+                                ⋯
+                              </button>
+                            )}
+                          </div>
+
+                          {showContextMenu && (
+                            <div className="message-context-menu">
+                              <button
+                                className="message-context-item"
+                                type="button"
+                                onClick={() => handleEditStart(message)}
+                              >
+                                Редактировать
+                              </button>
+                              <button
+                                className="message-context-item message-context-item--danger"
+                                type="button"
+                                onClick={() => handleDelete(message.id)}
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          )}
+
+                          {isEditing ? (
+                            <div className="message-edit-shell">
+                              <textarea
+                                className="text-area message-edit-textarea"
+                                value={editDraft}
+                                onChange={(e) => setEditDraft(e.target.value)}
+                                rows={2}
+                              />
+                              <div className="message-edit-actions">
+                                <button className="button button-secondary" type="button" onClick={handleEditSave}>
+                                  Сохранить
+                                </button>
+                                <button
+                                  className="button button-ghost"
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingMessageId(null);
+                                    setEditDraft('');
+                                  }}
+                                >
+                                  Отмена
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="message-text">{message.text}</p>
+                          )}
                         </div>
-                        <p className="message-text">{message.text}</p>
-                      </div>
-                    </article>
-                  ))
+                      </article>
+                    );
+                  })
                 )}
               </div>
 

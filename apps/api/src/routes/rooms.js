@@ -216,6 +216,78 @@ export default async function roomRoutes(fastify) {
     }
   });
 
+  // Обновить сообщение (только автор)
+  fastify.put('/:roomId/messages/:messageId', async (request, reply) => {
+    const { roomId, messageId } = request.params;
+    const token = getSessionToken(request);
+    const body = String(request.body?.body || '').trim();
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    if (!body) {
+      return reply.status(400).send({ ok: false, error: 'message_body_required' });
+    }
+
+    try {
+      const message = await fastify.store.updateMessage({
+        token,
+        roomId,
+        messageId,
+        body
+      });
+
+      if (!message) {
+        if (message === 'not_found') {
+          return reply.status(404).send({ ok: false, error: 'message_not_found' });
+        }
+        if (message === 'forbidden') {
+          return reply.status(403).send({ ok: false, error: 'not_author' });
+        }
+        return reply.status(400).send({ ok: false, error: 'update_failed' });
+      }
+
+      return { ok: true, message };
+    } catch (error) {
+      fastify.log.error('Error updating message:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
+  // Удалить сообщение (только автор)
+  fastify.delete('/:roomId/messages/:messageId', async (request, reply) => {
+    const { roomId, messageId } = request.params;
+    const token = getSessionToken(request);
+
+    if (!token) {
+      return reply.status(401).send({ ok: false, error: 'unauthorized' });
+    }
+
+    try {
+      const result = await fastify.store.deleteMessage({
+        token,
+        roomId,
+        messageId
+      });
+
+      if (!result) {
+        if (result === 'not_found') {
+          return reply.status(404).send({ ok: false, error: 'message_not_found' });
+        }
+        if (result === 'forbidden') {
+          return reply.status(403).send({ ok: false, error: 'not_author' });
+        }
+        return reply.status(400).send({ ok: false, error: 'delete_failed' });
+      }
+
+      return { ok: true };
+    } catch (error) {
+      fastify.log.error('Error deleting message:', error);
+      return reply.status(500).send({ ok: false, error: 'internal_error' });
+    }
+  });
+
   // Создать LiveKit токен для комнаты
   fastify.post('/:roomId/token', async (request, reply) => {
     const { roomId } = request.params;

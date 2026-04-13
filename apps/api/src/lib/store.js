@@ -91,6 +91,14 @@ export async function createMessage(...args) {
   return impl().createMessage(...args);
 }
 
+export async function updateMessage(...args) {
+  return impl().updateMessage?.(...args) || null;
+}
+
+export async function deleteMessage(...args) {
+  return impl().deleteMessage?.(...args) || null;
+}
+
 export async function createRoom(...args) {
   return impl().createRoom?.(...args) || null;
 }

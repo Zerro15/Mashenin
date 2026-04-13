@@ -1216,5 +1216,106 @@
   text-align: center;
 }
 
+/* Message editing & context menu */
+.message-topline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.message-edited {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.message-menu-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.1rem 0.3rem;
+  color: #94a3b8;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.message-menu-btn:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.message-context-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+  overflow: hidden;
+  min-width: 140px;
+}
+
+.message-context-item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #334155;
+  text-align: left;
+}
+
+.message-context-item:hover {
+  background: #f1f5f9;
+}
+
+.message-context-item--danger {
+  color: #ef4444;
+  border-top: 1px solid #f1f5f9;
+}
+
+.message-context-item--danger:hover {
+  background: #fef2f2;
+}
+
+.message-bubble {
+  position: relative;
+}
+
+.message-edit-shell {
+  margin-top: 0.25rem;
+}
+
+.message-edit-textarea {
+  margin-bottom: 0.5rem;
+}
+
+.message-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.button-ghost {
+  background: none;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.button-ghost:hover {
+  background: #f8fafc;
+  color: #334155;
+}
+
+
 
 
