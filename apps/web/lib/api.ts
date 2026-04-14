@@ -29,6 +29,18 @@ export function clearSessionToken() {
   document.cookie = `${SESSION_KEY}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
+function createAuthHeaders(headersInit: HeadersInit | undefined, sessionToken: string) {
+  const headers = new Headers(headersInit);
+
+  if (sessionToken) {
+    headers.set('Authorization', `Bearer ${sessionToken}`);
+    // Temporary fallback during auth contract alignment.
+    headers.set('x-session-token', sessionToken);
+  }
+
+  return headers;
+}
+
 export function createApiClient(baseURL?: string) {
   const instance = axios.create({
     baseURL: baseURL || API_BASE_URL,
@@ -58,12 +70,11 @@ export function createApiClient(baseURL?: string) {
     put: (url: string, data?: any) => instance.put(url, data),
     delete: (url: string) => instance.delete(url),
     apiFetch: (path: string, options: RequestInit = {}, sessionToken?: string) => {
+      const token = sessionToken || getSessionToken();
+
       return fetch(`${API_BASE_URL}${path}`, {
         ...options,
-        headers: {
-          ...options.headers,
-          'x-session-token': sessionToken || '',
-        },
+        headers: createAuthHeaders(options.headers, token),
       });
     },
   };

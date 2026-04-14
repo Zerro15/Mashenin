@@ -317,6 +317,13 @@ export default function RoomPage() {
   const router = useRouter();
   const roomId = typeof router.query.roomId === 'string' ? router.query.roomId : '';
   const { user, isChecking, logout } = useAuthRoute('protected');
+  const redirectToLoginForRoom = useCallback((targetRoomId?: string) => {
+    clearSessionToken();
+    const nextRoomId = targetRoomId || roomId;
+    const nextPath = nextRoomId ? `/room/${nextRoomId}` : '/rooms';
+    const nextParam = encodeURIComponent(nextPath);
+    void router.replace(`/login?next=${nextParam}`);
+  }, [roomId, router]);
 
   const [room, setRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<RoomMessage[]>([]);
@@ -591,19 +598,13 @@ export default function RoomPage() {
         const sessionResponse = await apiClient.get('/api/auth/me');
         if (!sessionResponse.data?.ok || !sessionResponse.data?.user) {
           if (!isActive) return;
-          clearSessionToken();
-          const currentPath = typeof window !== 'undefined' ? window.location.pathname : `/room/${room.id}`;
-          const nextParam = encodeURIComponent(currentPath);
-          router.replace(`/login?next=${nextParam}`);
+          redirectToLoginForRoom(room.id);
           return;
         }
       } catch (sessionError: any) {
         if (!isActive) return;
         if (sessionError?.response?.status === 401) {
-          clearSessionToken();
-          const currentPath = typeof window !== 'undefined' ? window.location.pathname : `/room/${room.id}`;
-          const nextParam = encodeURIComponent(currentPath);
-          router.replace(`/login?next=${nextParam}`);
+          redirectToLoginForRoom(room.id);
           return;
         }
         // Non-401 errors are silently ignored for polling resilience
@@ -665,7 +666,7 @@ export default function RoomPage() {
       isActive = false;
       window.clearInterval(intervalId);
     };
-  }, [isChecking, messagesState, room?.id, user]);
+  }, [isChecking, messagesState, redirectToLoginForRoom, room?.id, user]);
 
   useEffect(() => {
     if (liveRoomRef.current) {
@@ -1559,11 +1560,12 @@ export default function RoomPage() {
         setMessagesState('ready');
         setDraft('');
       } catch (submitError: any) {
-        const nextError =
-          submitError?.response?.status === 401
-            ? 'Сессия истекла. Войди снова.'
-            : 'Не удалось отправить сообщение.';
-        setSendError(nextError);
+        if (submitError?.response?.status === 401) {
+          redirectToLoginForRoom(roomId);
+          return;
+        }
+
+        setSendError('Не удалось отправить сообщение.');
       } finally {
         setIsSending(false);
       }
@@ -1583,12 +1585,12 @@ export default function RoomPage() {
         setMessagesState('ready');
         setDraft('');
       } catch (submitError: any) {
-        const nextError =
-          submitError?.response?.status === 401
-            ? 'Сессия истекла. Войди снова.'
-            : 'Не удалось отправить сообщение.';
+        if (submitError?.response?.status === 401) {
+          redirectToLoginForRoom(roomId);
+          return;
+        }
 
-        setSendError(nextError);
+        setSendError('Не удалось отправить сообщение.');
       } finally {
         setIsSending(false);
       }

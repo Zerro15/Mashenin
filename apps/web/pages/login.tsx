@@ -10,7 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const nextPath = getSafeLocalPath(
     typeof router.query.next === 'string' ? router.query.next : undefined,
-    '/teams'
+    '/rooms'
   );
   const isInviteAuth = nextPath.startsWith('/invite/');
   const { user, isChecking } = useAuthRoute('guest', { guestRedirectTo: nextPath });

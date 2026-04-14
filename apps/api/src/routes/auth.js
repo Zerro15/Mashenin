@@ -3,6 +3,16 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { hashPassword, verifyPassword, normalizeEmail } from '../lib/auth.js';
 
+function getSessionToken(request) {
+  const authHeader = request.headers.authorization;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+
+  return request.headers['x-session-token'] || null;
+}
+
 export default async function authRoutes(fastify) {
   // Регистрация пользователя по email/password
   fastify.post('/register', async (request, reply) => {
@@ -107,16 +117,14 @@ export default async function authRoutes(fastify) {
 
   // Получение информации о текущем пользователе
   fastify.get('/me', async (request, reply) => {
-    const authHeader = request.headers.authorization;
+    const token = getSessionToken(request);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return reply.status(401).send({
         ok: false,
         error: 'no_token'
       });
     }
-
-    const token = authHeader.substring(7);
 
     try {
       const user = await fastify.store.getSessionUser(token);
@@ -143,11 +151,9 @@ export default async function authRoutes(fastify) {
 
   // Выход пользователя
   fastify.post('/logout', async (request, reply) => {
-    const authHeader = request.headers.authorization;
+    const token = getSessionToken(request);
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-
+    if (token) {
       try {
         await fastify.store.clearSession(token);
       } catch (error) {
@@ -235,13 +241,11 @@ export default async function authRoutes(fastify) {
 
   // Верификация токена
   fastify.get('/verify', async (request, reply) => {
-    const authHeader = request.headers.authorization;
+    const token = getSessionToken(request);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return reply.status(401).send({ ok: false, error: 'no_token' });
     }
-
-    const token = authHeader.substring(7);
 
     try {
       const decoded = jwt.verify(token, fastify.config.jwt?.secret || 'dev-secret');
@@ -253,8 +257,7 @@ export default async function authRoutes(fastify) {
 
   // Обновить профиль
   fastify.put('/profile', async (request, reply) => {
-    const authHeader = request.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const token = getSessionToken(request);
 
     if (!token) {
       return reply.status(401).send({ ok: false, error: 'unauthorized' });

@@ -8,6 +8,7 @@ function getSessionToken(request) {
     return authHeader.substring(7);
   }
 
+  // Temporary fallback during auth contract alignment.
   return request.headers['x-session-token'] || null;
 }
 
