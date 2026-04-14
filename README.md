@@ -1,13 +1,34 @@
 # mashenin
 
-Voice-first messenger с командами, друзьями и личными сообщениями.
+Мессенджер с постоянными комнатами и текстовым MVP на `Next.js + Fastify`.
+
+## Current Source Of Truth
+
+Для текущей разработки и работы через Codex CLI использовать в таком порядке:
+
+1. `AGENTS.md`
+2. `PROJECT_STATE.md`
+3. `BACKLOG.md`
+4. `ARCHITECTURE.md`
+5. `DECISIONS.md`
+
+Этот `README.md` — обзорный вход в репозиторий, а не главный операционный документ.
+
+## Current Development Scope
+
+Активный focus проекта сейчас:
+
+- основной frontend: `apps/web`
+- основной backend: `apps/api`
+- active user flow: `login -> open room -> load message history -> send message`
+
+Репозиторий при этом содержит более широкий surface area вокруг `teams`, `friends`, `dm`, `events`, `invite`, `voice`, но это не должно переопределять текущий source-of-truth слой.
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/Zerro15/Mashenin.git
 cd Mashenin
-git checkout feat/teams-friends-dm
 docker compose up -d
 ```
 
@@ -93,5 +114,4 @@ docker compose down -v
 ```
 
 ## Branch
-
-Текущая ветка: `feat/teams-friends-dm`
+Не фиксируется в `README.md`. Актуальную ветку всегда смотреть через `git branch --show-current`.
