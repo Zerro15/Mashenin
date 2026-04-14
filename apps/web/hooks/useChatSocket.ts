@@ -96,7 +96,8 @@ export function useChatSocket(options: UseChatSocketOptions) {
 
       setStatus('connecting');
 
-      const wsUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/ws/rooms/${roomId}`;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const wsUrl = `${apiUrl}/api/ws/rooms/${roomId}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
