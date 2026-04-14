@@ -1,0 +1,17 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: mashenin-cloudflared
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - tunnel
+      - --metrics
+      - ${TUNNEL_METRICS:-0.0.0.0:2000}
+      - --protocol
+      - http2
+      - run
+      - --token
+      - ${CLOUDFLARE_TUNNEL_TOKEN}
+    profiles:
+      - tunnel

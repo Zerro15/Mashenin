@@ -2,27 +2,34 @@ services:
   web:
     image: node:20-alpine
     working_dir: /app
-    command: ["npm", "run", "dev"]
+    command: >
+      sh -c "npm install --prefix /app && HOST=0.0.0.0 PORT=3000 npm run dev"
     volumes:
       - ./apps/web:/app
+      - /app/node_modules
     ports:
-      - "3100:3000"
+      - "3001:3000"
     environment:
       HOST: 0.0.0.0
       PORT: 3000
       API_BASE_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
     depends_on:
       - api
+    networks:
+      - mashenin
 
   api:
     image: node:20-alpine
     working_dir: /app
-    command: ["node", "src/server.js"]
+    command: >
+      sh -c "npm install --prefix /app && node src/server.js"
     volumes:
       - ./apps/api:/app
       - ./packages/shared:/packages/shared
+      - /app/node_modules
     ports:
-      - "4100:4000"
+      - "4000:4000"
     environment:
       HOST: 0.0.0.0
       PORT: 4000
@@ -35,10 +42,12 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_WS_URL: ${LIVEKIT_WS_URL}
+      DATA_PROVIDER: sql
     depends_on:
       - postgres
       - redis
-      - livekit
+    networks:
+      - mashenin
 
   postgres:
     image: postgres:16-alpine
@@ -51,35 +60,21 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./infra/postgres/02-teams-friends-dm.sql:/docker-entrypoint-initdb.d/02-migration.sql:ro
+    networks:
+      - mashenin
 
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "56379:6379"
+    networks:
+      - mashenin
 
-  livekit:
-    image: livekit/livekit-server:latest
-    command: ["--config", "/etc/livekit.yaml"]
-    volumes:
-      - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
+networks:
+  mashenin:
+    driver: bridge
 
-  turn:
-    image: coturn/coturn:latest
-    command:
-      - -n
-      - --log-file=stdout
-      - --realm=${TURN_REALM}
-      - --user=${TURN_USER}:${TURN_PASSWORD}
-      - --listening-port=3478
-      - --min-port=49160
-      - --max-port=49200
-    ports:
-      - "53479:3478"
-            
 volumes:
   postgres-data:

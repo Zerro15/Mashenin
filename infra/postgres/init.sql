@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE user_presence AS ENUM ('offline', 'online', 'away', 'in_voice');
-CREATE TYPE room_kind AS ENUM ('persistent', 'temporary');
+CREATE TYPE room_kind AS ENUM ('persistent', 'temporary', 'direct');
 CREATE TYPE room_member_role AS ENUM ('owner', 'moderator', 'member');
 CREATE TYPE invite_status AS ENUM ('active', 'disabled', 'exhausted');
 CREATE TYPE event_rsvp AS ENUM ('going', 'maybe', 'declined');
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS invite_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code TEXT NOT NULL UNIQUE,
   created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  room_id UUID,
   max_uses INTEGER NOT NULL DEFAULT 1 CHECK (max_uses > 0),
   used_count INTEGER NOT NULL DEFAULT 0 CHECK (used_count >= 0),
   status invite_status NOT NULL DEFAULT 'active',
@@ -64,6 +65,21 @@ CREATE TABLE IF NOT EXISTS room_memberships (
   last_read_at TIMESTAMPTZ,
   PRIMARY KEY (room_id, user_id)
 );
+
+ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS room_id UUID;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'invite_codes_room_id_fkey'
+  ) THEN
+    ALTER TABLE invite_codes
+      ADD CONSTRAINT invite_codes_room_id_fkey
+      FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS voice_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -112,6 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_voice_sessions_room_id ON voice_sessions (room_id
 CREATE INDEX IF NOT EXISTS idx_voice_sessions_user_id ON voice_sessions (user_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_room_id ON messages (room_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_starts_at ON events (starts_at);
+CREATE INDEX IF NOT EXISTS idx_invite_codes_room_id ON invite_codes (room_id);
 
 INSERT INTO users (display_name, slug, presence, status_note)
 VALUES

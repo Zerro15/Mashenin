@@ -57,7 +57,14 @@ function normalizeState(state) {
   state.rooms = state.rooms || [];
   state.events = state.events || [];
   state.messages = state.messages || [];
-  state.inviteCodes = state.inviteCodes || [];
+  state.inviteCodes = (state.inviteCodes || []).map((invite) => ({
+    ...invite,
+    maxUses: Number(invite.maxUses || invite.availableSlots || 1),
+    usedCount: Number(invite.usedCount || 0),
+    status: invite.status || "active",
+    roomId: invite.roomId || null,
+    createdByUserId: invite.createdByUserId || null
+  }));
   state.sessions = state.sessions || [];
   state.roomMemberships = state.roomMemberships || [];
   return state;
@@ -131,6 +138,16 @@ function getSessionRecord(token) {
   return state.sessions.find((session) => session.token === token) || null;
 }
 
+function slugifyRoomName(value) {
+  const normalized = String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+
+  return normalized || `room-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function buildSessionPayload(user, ttlSeconds, state) {
   const session = buildSessionRecord(user.id, ttlSeconds);
   state.sessions = state.sessions.filter((entry) => entry.userId !== user.id);
@@ -140,6 +157,92 @@ function buildSessionPayload(user, ttlSeconds, state) {
     token: session.token,
     user: publicUser(user),
     expiresAt: session.expiresAt
+  };
+}
+
+function buildInviteCode() {
+  return crypto.randomBytes(4).toString("hex");
+}
+
+function buildDirectRoomSlug(userId, peerUserId) {
+  const pairKey = [String(userId || ""), String(peerUserId || "")].sort().join(":");
+  return `dm-${crypto.createHash("sha1").update(pairKey).digest("hex").slice(0, 12)}`;
+}
+
+function buildDirectRoomName(leftName, rightName) {
+  const names = [String(leftName || "").trim(), String(rightName || "").trim()].filter(Boolean);
+  if (names.length === 0) {
+    return "Личный разговор";
+  }
+
+  return names
+    .sort((a, b) => a.localeCompare(b, "ru", { sensitivity: "base" }))
+    .join(" и ");
+}
+
+function findRoomRecord(state, roomId) {
+  return state.rooms.find((entry) => entry.id === roomId || entry.slug === roomId) || null;
+}
+
+function isRoomInviteActive(invite) {
+  if (!invite || !invite.roomId) {
+    return false;
+  }
+
+  const maxUses = Number(invite.maxUses || 1);
+  const usedCount = Number(invite.usedCount || 0);
+
+  return (invite.status || "active") === "active" && usedCount < maxUses;
+}
+
+function getRoomMembershipCount(state, roomId) {
+  return (state.roomMemberships || []).filter((membership) => membership.roomId === roomId).length;
+}
+
+function getRoomParticipants(state, roomId) {
+  return (state.roomMemberships || [])
+    .filter((membership) => membership.roomId === roomId)
+    .map((membership) => state.users.find((user) => user.id === membership.userId) || null)
+    .filter(Boolean)
+    .map((user) => ({
+      id: user.id,
+      name: user.name
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, 'ru', { sensitivity: 'base' }));
+}
+
+function findExistingDirectRoom(state, userId, peerUserId) {
+  return (
+    (state.rooms || []).find((room) => {
+      if (room.kind !== "direct") {
+        return false;
+      }
+
+      const memberIds = (state.roomMemberships || [])
+        .filter((membership) => membership.roomId === room.id)
+        .map((membership) => membership.userId);
+
+      return memberIds.length === 2 && memberIds.includes(userId) && memberIds.includes(peerUserId);
+    }) || null
+  );
+}
+
+function getSessionUserId(state, token) {
+  if (!token) {
+    return null;
+  }
+
+  const session = (state.sessions || []).find((entry) => entry.token === token);
+  return session?.userId || null;
+}
+
+function mapRoomSummary(state, room) {
+  return {
+    id: room.id,
+    name: room.name,
+    kind: room.kind,
+    topic: room.topic,
+    members: getRoomMembershipCount(state, room.id)
   };
 }
 
@@ -157,8 +260,23 @@ export async function getSummary() {
   };
 }
 
-export async function getRooms() {
-  return readState().rooms;
+export async function getRooms({ token } = {}) {
+  const state = readState();
+  const userId = getSessionUserId(state, token);
+
+  if (!userId) {
+    return [];
+  }
+
+  const userRoomIds = new Set(
+    (state.roomMemberships || [])
+      .filter((membership) => membership.userId === userId)
+      .map((membership) => membership.roomId)
+  );
+
+  return state.rooms
+    .filter((room) => userRoomIds.has(room.id))
+    .map((room) => mapRoomSummary(state, room));
 }
 
 export async function getFriends() {
@@ -180,7 +298,8 @@ export async function getRoomById(roomId) {
   const speakers = state.users.filter((friend) => friend.roomId === roomId);
 
   return {
-    ...room,
+    ...mapRoomSummary(state, room),
+    participants: getRoomParticipants(state, room.id),
     speakers: speakers.map(publicUser)
   };
 }
@@ -254,6 +373,15 @@ export async function getSessionUser(token) {
   return publicUser(user);
 }
 
+/**
+ * Получение пользователя по userId напрямую (для WS auth).
+ */
+export async function getUserById(userId) {
+  const state = readState();
+  const user = state.users.find((friend) => friend.id === userId) || null;
+  return publicUser(user);
+}
+
 export async function clearSession(token) {
   updateState((state) => {
     state.sessions = state.sessions.filter((session) => session.token !== token);
@@ -296,6 +424,42 @@ export async function joinRoom({ token, roomId }) {
   return result;
 }
 
+export async function leaveRoom({ token, roomId }) {
+  let result = null;
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const room = state.rooms.find((entry) => entry.id === roomId || entry.slug === roomId);
+
+    if (!user || !room) {
+      return state;
+    }
+
+    if (user.roomId === room.id) {
+      if (room.members > 0) {
+        room.members -= 1;
+      }
+
+      user.roomId = null;
+      user.status = 'online';
+      user.note = 'снова в сети';
+    }
+
+    result = {
+      user: publicUser(user),
+      room: {
+        ...mapRoomSummary(state, room),
+        speakers: state.users.filter((friend) => friend.roomId === room.id).map(publicUser)
+      }
+    };
+
+    return state;
+  });
+
+  return result;
+}
+
 export async function createRoomAccess({ token, roomId, ttlSeconds = 3600 }) {
   const user = await getSessionUser(token);
   const room = await getRoomById(roomId);
@@ -310,6 +474,298 @@ export async function createRoomAccess({ token, roomId, ttlSeconds = 3600 }) {
     roomName: room.id,
     ttlSeconds
   };
+}
+
+export async function createRoom({ token, name, topic = '' }) {
+  const normalizedName = String(name || '').trim();
+  const normalizedTopic = String(topic || '').trim();
+
+  if (!token || !normalizedName) {
+    return null;
+  }
+
+  let createdRoom = null;
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+
+    if (!user) {
+      return state;
+    }
+
+    const slugBase = slugifyRoomName(normalizedName);
+    const hasSameSlug = state.rooms.some((room) => room.id === slugBase || room.slug === slugBase);
+    const roomId = hasSameSlug ? `${slugBase}-${Math.random().toString(36).slice(2, 6)}` : slugBase;
+
+    const room = {
+      id: roomId,
+      slug: roomId,
+      name: normalizedName,
+      kind: 'persistent',
+      topic: normalizedTopic || 'новая комната',
+      members: 0
+    };
+
+    state.rooms.push(room);
+    state.roomMemberships = state.roomMemberships || [];
+    state.roomMemberships.push({
+      roomId,
+      userId: user.id,
+      role: 'owner',
+      joinedAt: Date.now()
+    });
+
+    createdRoom = {
+      ...mapRoomSummary(state, room),
+      speakers: []
+    };
+
+    return state;
+  });
+
+  return createdRoom;
+}
+
+export async function getOrCreateDirectRoom({ token, peerUserId }) {
+  const normalizedPeerUserId = String(peerUserId || "").trim();
+  let result = { ok: false, error: "direct_room_open_failed" };
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+
+    if (!user) {
+      result = { ok: false, error: "unauthorized" };
+      return state;
+    }
+
+    if (!normalizedPeerUserId) {
+      result = { ok: false, error: "peer_user_required" };
+      return state;
+    }
+
+    if (normalizedPeerUserId === user.id) {
+      result = { ok: false, error: "self_direct_not_allowed" };
+      return state;
+    }
+
+    const peer = state.users.find((entry) => entry.id === normalizedPeerUserId);
+
+    if (!peer) {
+      result = { ok: false, error: "user_not_found" };
+      return state;
+    }
+
+    const existingRoom = findExistingDirectRoom(state, user.id, peer.id);
+
+    if (existingRoom) {
+      result = {
+        ok: true,
+        created: false,
+        room: mapRoomSummary(state, existingRoom)
+      };
+      return state;
+    }
+
+    const roomIdBase = buildDirectRoomSlug(user.id, peer.id);
+    const hasSameSlug = state.rooms.some((room) => room.id === roomIdBase || room.slug === roomIdBase);
+    const roomId = hasSameSlug ? `${roomIdBase}-${Math.random().toString(36).slice(2, 6)}` : roomIdBase;
+
+    const room = {
+      id: roomId,
+      slug: roomId,
+      name: buildDirectRoomName(user.name, peer.name),
+      kind: "direct",
+      topic: "личный разговор",
+      members: 0
+    };
+
+    state.rooms.push(room);
+    state.roomMemberships = state.roomMemberships || [];
+    state.roomMemberships.push({
+      roomId,
+      userId: user.id,
+      role: "owner",
+      joinedAt: Date.now()
+    });
+    state.roomMemberships.push({
+      roomId,
+      userId: peer.id,
+      role: "member",
+      joinedAt: Date.now()
+    });
+
+    result = {
+      ok: true,
+      created: true,
+      room: mapRoomSummary(state, room)
+    };
+
+    return state;
+  });
+
+  return result;
+}
+
+export async function createRoomInvite({ token, roomId }) {
+  let result = { ok: false, error: "internal_error" };
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const room = findRoomRecord(state, roomId);
+
+    if (!user) {
+      result = { ok: false, error: "unauthorized" };
+      return state;
+    }
+
+    if (!room) {
+      result = { ok: false, error: "room_not_found" };
+      return state;
+    }
+
+    const isMember = (state.roomMemberships || []).some(
+      (membership) => membership.roomId === room.id && membership.userId === user.id
+    );
+
+    if (!isMember) {
+      result = { ok: false, error: "forbidden" };
+      return state;
+    }
+
+    let code = buildInviteCode();
+
+    while (state.inviteCodes.some((invite) => invite.code === code)) {
+      code = buildInviteCode();
+    }
+
+    state.inviteCodes.push({
+      code,
+      roomId: room.id,
+      createdByUserId: user.id,
+      maxUses: 1,
+      usedCount: 0,
+      status: "active",
+      createdAt: Date.now()
+    });
+
+    result = {
+      ok: true,
+      invite: {
+        code,
+        roomId: room.id,
+        path: `/invite/${code}`
+      }
+    };
+
+    return state;
+  });
+
+  return result;
+}
+
+export async function getRoomInvitePreview(code) {
+  const state = readState();
+  const invite = state.inviteCodes.find((entry) => entry.code === code && isRoomInviteActive(entry));
+
+  if (!invite) {
+    return { ok: false, error: "invite_not_found" };
+  }
+
+  const room = findRoomRecord(state, invite.roomId);
+
+  if (!room) {
+    return { ok: false, error: "room_not_found" };
+  }
+
+  const createdBy = state.users.find((user) => user.id === invite.createdByUserId) || null;
+
+  return {
+    ok: true,
+    invite: {
+      code: invite.code,
+      roomId: room.id,
+      roomName: room.name,
+      roomTopic: room.topic,
+      createdBy: createdBy
+        ? {
+            id: createdBy.id,
+            name: createdBy.name
+          }
+        : null
+    }
+  };
+}
+
+export async function acceptRoomInvite({ token, code }) {
+  let result = { ok: false, error: "internal_error" };
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const invite = state.inviteCodes.find((entry) => entry.code === code && entry.roomId);
+
+    if (!user) {
+      result = { ok: false, error: "unauthorized" };
+      return state;
+    }
+
+    if (!invite) {
+      result = { ok: false, error: "invite_not_found" };
+      return state;
+    }
+
+    const room = findRoomRecord(state, invite.roomId);
+
+    if (!room) {
+      result = { ok: false, error: "room_not_found" };
+      return state;
+    }
+
+    const alreadyMember = (state.roomMemberships || []).some(
+      (membership) => membership.roomId === room.id && membership.userId === user.id
+    );
+
+    if (alreadyMember) {
+      result = {
+        ok: true,
+        room: mapRoomSummary(state, room),
+        joined: false
+      };
+      return state;
+    }
+
+    if (!isRoomInviteActive(invite)) {
+      result = { ok: false, error: "invite_not_found" };
+      return state;
+    }
+
+    state.roomMemberships = state.roomMemberships || [];
+    state.roomMemberships.push({
+      roomId: room.id,
+      userId: user.id,
+      role: "member",
+      joinedAt: Date.now()
+    });
+
+    invite.usedCount = Number(invite.usedCount || 0) + 1;
+
+    if (invite.usedCount >= Number(invite.maxUses || 1)) {
+      invite.status = "exhausted";
+    }
+
+    result = {
+      ok: true,
+      room: mapRoomSummary(state, room),
+      joined: true
+    };
+
+    return state;
+  });
+
+  return result;
 }
 
 export async function registerUser({
@@ -601,7 +1057,7 @@ export async function getRoomSocial(roomId) {
   };
 }
 
-export async function createMessage({ token, roomId, body }) {
+export async function createMessage({ token, roomId, body, authorId, authorName }) {
   const trimmed = (body || "").trim();
   if (!trimmed) {
     return null;
@@ -610,8 +1066,31 @@ export async function createMessage({ token, roomId, body }) {
   let created = null;
 
   updateState((state) => {
-    const session = state.sessions.find((entry) => entry.token === token);
-    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    let user = null;
+
+    // WS-подключение может передавать authorId напрямую
+    if (authorId) {
+      user = state.users.find((entry) => entry.id === authorId);
+      // Если пользователя нет — создаём临时 (для WS с авторизацией это не должно случаться)
+      if (!user) {
+        user = {
+          id: authorId,
+          name: authorName || 'Пользователь',
+          status: 'online',
+          note: 'в чате через WebSocket',
+          roomId: null,
+          email: null,
+          passwordHash: null,
+          about: ''
+        };
+        state.users.push(user);
+      }
+    } else {
+      // HTTP-подключение через token
+      const session = state.sessions.find((entry) => entry.token === token);
+      user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    }
+
     const room = state.rooms.find((entry) => entry.id === roomId);
 
     if (!user || !room) {
@@ -632,6 +1111,50 @@ export async function createMessage({ token, roomId, body }) {
   });
 
   return created;
+}
+
+export async function updateMessage({ token, roomId, messageId, body }) {
+  const trimmed = (body || '').trim();
+  if (!trimmed) return null;
+
+  let updated = null;
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const message = state.messages.find((m) => m.id === messageId && m.roomId === roomId);
+
+    if (!message) return null; // not_found
+    if (!user) return null; // not_found
+    if (message.author !== user.name) return 'forbidden';
+
+    message.text = trimmed;
+    message.editedAt = new Date().toISOString();
+    updated = { ...message };
+    return state;
+  });
+
+  return updated;
+}
+
+export async function deleteMessage({ token, roomId, messageId }) {
+  let deleted = false;
+
+  updateState((state) => {
+    const session = state.sessions.find((entry) => entry.token === token);
+    const user = session ? state.users.find((entry) => entry.id === session.userId) : null;
+    const idx = state.messages.findIndex((m) => m.id === messageId && m.roomId === roomId);
+
+    if (idx === -1) return null; // not_found
+    if (!user) return null;
+    if (state.messages[idx].author !== user.name) return 'forbidden';
+
+    state.messages.splice(idx, 1);
+    deleted = true;
+    return state;
+  });
+
+  return deleted;
 }
 
 export async function createEvent({ token, title, startsAt, roomId = null }) {

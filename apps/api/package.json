@@ -17,6 +17,8 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test:smoke": "node --test test/mvp-smoke.test.js",
+    "test:sql": "node --test test/sql-smoke.test.js"
   }
 }

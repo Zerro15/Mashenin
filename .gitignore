@@ -5,13 +5,34 @@ node_modules/
 dist/
 build/
 .next/
+.next_backup/
+.next_stale_*/
+.qwen/
 coverage/
 *.log
+*.tsbuildinfo
+.codex
 
 apps/web/node_modules/
 apps/api/node_modules/
 packages/shared/node_modules/
 apps/api/data/*.json
+data/*.json
 
 postgres-data/
 redis-data/
+
+# Infra generated files
+infra/TURN/
+infrastructure/cloudflare/credentials/
+
+# Accidental nested/empty dirs
+apps/web/api/
+apps/web/apps/
+
+# Browser test harness temp files
+/tmp/browser-*.mjs
+/tmp/pub-browser-test.mjs
+/tmp/error-session-test.mjs
+/tmp/polling-session-test.mjs
+/tmp/stale-auth-fix-test.mjs

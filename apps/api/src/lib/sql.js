@@ -3,6 +3,11 @@ let pool = null;
 export async function createPool(config) {
   const { Pool } = await import("pg");
 
+  if (pool) {
+    // Pool already exists — reuse it (idempotent for hot-reload safety)
+    return pool;
+  }
+
   pool = new Pool({
     host: config.host,
     port: config.port,
@@ -20,4 +25,11 @@ export function getPool() {
   }
 
   return pool;
+}
+
+export async function closePool() {
+  if (pool) {
+    await pool.end();
+    pool = null;
+  }
 }
