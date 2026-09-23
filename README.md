@@ -115,3 +115,10 @@ docker compose down -v
 
 ## Branch
 Не фиксируется в `README.md`. Актуальную ветку всегда смотреть через `git branch --show-current`.
+
+
+## Скриншоты интерфейса
+
+![Главная страница Mashenin](screenshots/2026-04-03_23-34-58/04-home.png)
+
+![Экран голосовой и текстовой комнаты](screenshots/2026-04-03_23-34-58/10-room-general.png)
